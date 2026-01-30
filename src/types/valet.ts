@@ -1,0 +1,101 @@
+// ValetPro Type Definitions
+
+export type VehicleStatus = 'parked' | 'requested' | 'in_transit' | 'delivered' | 'reserved';
+
+export type AttendantStatus = 'available' | 'busy' | 'break' | 'offline';
+
+export type PaymentMethod = 'pix' | 'credit' | 'debit' | 'cash' | 'monthly';
+
+export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+
+export interface Vehicle {
+  id: string;
+  plate: string;
+  brand: string;
+  model: string;
+  color: string;
+  year: number;
+  status: VehicleStatus;
+  entryTime: Date;
+  exitTime?: Date;
+  spotId: string;
+  attendantId: string;
+  clientName: string;
+  clientPhone: string;
+  observations?: string;
+  photos?: string[];
+  fuelLevel?: number;
+  mileage?: number;
+}
+
+export interface Attendant {
+  id: string;
+  name: string;
+  photo: string;
+  status: AttendantStatus;
+  phone: string;
+  vehiclesHandled: number;
+  avgServiceTime: number; // in seconds
+  rating: number;
+  currentVehicleId?: string;
+  shift: 'morning' | 'afternoon' | 'night';
+  isOnline: boolean;
+}
+
+export interface ParkingSpot {
+  id: string;
+  code: string;
+  floor: number;
+  section: string;
+  type: 'regular' | 'vip' | 'accessible' | 'electric' | 'motorcycle';
+  status: 'available' | 'occupied' | 'reserved' | 'maintenance';
+  vehicleId?: string;
+}
+
+export interface Transaction {
+  id: string;
+  vehicleId: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  status: PaymentStatus;
+  createdAt: Date;
+  completedAt?: Date;
+  receiptNumber: string;
+  duration: number; // in minutes
+}
+
+export interface DashboardStats {
+  totalVehicles: number;
+  availableSpots: number;
+  occupancyRate: number;
+  todayRevenue: number;
+  avgStayDuration: number;
+  activeAttendants: number;
+  vehiclesWaiting: number;
+  avgWaitTime: number;
+}
+
+export interface RevenueData {
+  date: string;
+  revenue: number;
+  transactions: number;
+}
+
+export interface OccupancyData {
+  hour: string;
+  occupancy: number;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  cpf?: string;
+  vehicles: string[];
+  tier: 'bronze' | 'silver' | 'gold' | 'diamond';
+  totalVisits: number;
+  totalSpent: number;
+  cashback: number;
+  createdAt: Date;
+}
