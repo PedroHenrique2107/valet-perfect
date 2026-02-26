@@ -1,4 +1,4 @@
-// ValetPro Type Definitions
+// ValetTrack Type Definitions
 
 export type VehicleStatus = 'parked' | 'requested' | 'in_transit' | 'delivered' | 'reserved';
 

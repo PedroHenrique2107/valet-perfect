@@ -114,7 +114,7 @@ export function Sidebar() {
           </div>
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="font-bold text-foreground">ValetPro</span>
+              <span className="font-bold text-foreground">ValetTracker</span>
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
                 Sistema de Gestão
               </span>
@@ -160,13 +160,13 @@ export function Sidebar() {
           )}
         >
           <Avatar className="h-9 w-9 flex-shrink-0">
-            <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=Admin" />
+            <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=Pedro" />
             <AvatarFallback>AD</AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">Admin Master</p>
-              <p className="text-xs text-muted-foreground truncate">Super Administrador</p>
+              <p className="text-sm font-medium truncate">Pedro</p>
+              <p className="text-xs text-muted-foreground truncate">Administrador</p>
             </div>
           )}
           {!collapsed && (
