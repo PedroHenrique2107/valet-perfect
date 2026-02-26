@@ -71,3 +71,17 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+
+
+
+
+
+## IDEIA INICIAL
+
+Primeiro desenvolver um aplicativo para o CEO da empresa com visualização de tudo, depois ir separando por {Supervisor, Líder e Manobrista}
+
+Ideia é seguir o fluxo:
+
+Local do Patio -> Usuários daquele pátio -> Quanto entro naquele caixa naquele dia -> Quantos carros 
+Usuário vai abrir um caixa -> Registrar entrada e saida dos carros -> Selecionar as vagas ocupadas -> Fechar caixa

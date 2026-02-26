@@ -1,30 +1,29 @@
-import { MainLayout } from '@/components/layout/MainLayout';
-import { ParkingMap } from '@/components/dashboard/ParkingMap';
-import { mockParkingSpots } from '@/data/mockData';
-import { Button } from '@/components/ui/button';
-import { Settings, Layers, RefreshCw } from 'lucide-react';
+import { Layers, RefreshCw, Settings } from "lucide-react";
+import { ParkingMap } from "@/components/dashboard/ParkingMap";
+import { MainLayout } from "@/components/layout/MainLayout";
+import { Button } from "@/components/ui/button";
+import { useParkingSpotsQuery } from "@/hooks/useValetData";
 
 export default function ParkingMapPage() {
+  const { data: parkingSpots = [] } = useParkingSpotsQuery();
+
   const stats = {
-    total: mockParkingSpots.length,
-    available: mockParkingSpots.filter((s) => s.status === 'available').length,
-    occupied: mockParkingSpots.filter((s) => s.status === 'occupied').length,
-    reserved: mockParkingSpots.filter((s) => s.status === 'reserved').length,
-    maintenance: mockParkingSpots.filter((s) => s.status === 'maintenance').length,
+    total: parkingSpots.length,
+    available: parkingSpots.filter((spot) => spot.status === "available").length,
+    occupied: parkingSpots.filter((spot) => spot.status === "occupied").length,
+    reserved: parkingSpots.filter((spot) => spot.status === "reserved").length,
+    maintenance: parkingSpots.filter((spot) => spot.status === "maintenance").length,
   };
 
-  const occupancyRate = Math.round((stats.occupied / stats.total) * 100);
+  const occupancyRate = stats.total > 0 ? Math.round((stats.occupied / stats.total) * 100) : 0;
 
   return (
     <MainLayout>
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="space-y-6 p-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Mapa do Pátio</h1>
-            <p className="text-muted-foreground">
-              Visualização em tempo real das vagas
-            </p>
+            <p className="text-muted-foreground">Visualização em tempo real das vagas</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="gap-2">
@@ -42,21 +41,20 @@ export default function ParkingMapPage() {
           </div>
         </div>
 
-        {/* Stats Bar */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <div className="stat-card text-center">
             <p className="text-3xl font-bold text-foreground">{stats.total}</p>
             <p className="text-sm text-muted-foreground">Total de Vagas</p>
           </div>
-          <div className="stat-card text-center border-l-4 border-l-success">
+          <div className="stat-card border-l-4 border-l-success text-center">
             <p className="text-3xl font-bold text-success">{stats.available}</p>
             <p className="text-sm text-muted-foreground">Disponíveis</p>
           </div>
-          <div className="stat-card text-center border-l-4 border-l-destructive">
+          <div className="stat-card border-l-4 border-l-destructive text-center">
             <p className="text-3xl font-bold text-destructive">{stats.occupied}</p>
             <p className="text-sm text-muted-foreground">Ocupadas</p>
           </div>
-          <div className="stat-card text-center border-l-4 border-l-info">
+          <div className="stat-card border-l-4 border-l-info text-center">
             <p className="text-3xl font-bold text-info">{stats.reserved}</p>
             <p className="text-sm text-muted-foreground">Reservadas</p>
           </div>
@@ -66,8 +64,7 @@ export default function ParkingMapPage() {
           </div>
         </div>
 
-        {/* Map */}
-        <ParkingMap spots={mockParkingSpots} />
+        <ParkingMap spots={parkingSpots} />
       </div>
     </MainLayout>
   );

@@ -1,54 +1,65 @@
-import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { cn } from '@/lib/utils';
+import { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard,
+  BarChart3,
+  Bell,
+  Building2,
+  Calendar,
   Car,
-  Users,
+  ChevronLeft,
+  ChevronRight,
+  LayoutDashboard,
+  LogOut,
   MapPin,
   Receipt,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   UserCircle,
-  BarChart3,
-  Calendar,
-  Bell,
-  LogOut,
-  Building2,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+  Users,
+} from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { getRoleDisplayName, useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
+import type { UserRole } from "@/types/auth";
 
 interface NavItem {
   icon: React.ElementType;
   label: string;
   href: string;
   badge?: number;
+  comingSoon?: boolean;
 }
 
 const mainNavItems: NavItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
-  { icon: Car, label: 'Veículos', href: '/vehicles', badge: 6 },
-  { icon: Users, label: 'Manobristas', href: '/attendants' },
-  { icon: MapPin, label: 'Mapa do Pátio', href: '/parking-map' },
-  { icon: Receipt, label: 'Financeiro', href: '/financial' },
-  { icon: UserCircle, label: 'Clientes', href: '/clients' },
-  { icon: BarChart3, label: 'Relatórios', href: '/reports' },
-  { icon: Calendar, label: 'Eventos', href: '/events' },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/" },
+  { icon: Car, label: "Veículos", href: "/vehicles", badge: 6 },
+  { icon: Users, label: "Manobristas", href: "/attendants" },
+  { icon: MapPin, label: "Mapa do Pátio", href: "/parking-map" },
+  { icon: Receipt, label: "Financeiro", href: "/financial" },
+  { icon: UserCircle, label: "Clientes", href: "/clients", comingSoon: true },
+  { icon: BarChart3, label: "Relatórios", href: "/reports", comingSoon: true },
+  { icon: Calendar, label: "Eventos", href: "/events", comingSoon: true },
 ];
 
 const bottomNavItems: NavItem[] = [
-  { icon: Bell, label: 'Notificações', href: '/notifications', badge: 5 },
-  { icon: Settings, label: 'Configurações', href: '/settings' },
+  { icon: Bell, label: "Notificações", href: "/notifications", badge: 5, comingSoon: true },
+  { icon: Settings, label: "Configurações", href: "/settings", comingSoon: true },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { user, setRole } = useAuth();
 
-  const NavLink = ({ item }: { item: NavItem }) => {
+  const NavItemLink = ({ item }: { item: NavItem }) => {
     const isActive = location.pathname === item.href;
     const Icon = item.icon;
 
@@ -56,31 +67,29 @@ export function Sidebar() {
       <Link
         to={item.href}
         className={cn(
-          'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative',
+          "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200",
           isActive
-            ? 'bg-primary/10 text-primary'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
         )}
       >
-        <Icon className={cn('h-5 w-5 flex-shrink-0', isActive && 'text-primary')} />
+        <Icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-primary")} />
         {!collapsed && (
-          <span className="font-medium text-sm">{item.label}</span>
+          <span className={cn("text-sm font-medium", item.comingSoon && "line-through decoration-2")}>
+            {item.label}
+          </span>
         )}
         {item.badge && item.badge > 0 && (
           <span
             className={cn(
-              'absolute flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground',
-              collapsed
-                ? 'top-0 right-0 h-4 w-4 text-[10px]'
-                : 'right-3 h-5 min-w-5 px-1.5'
+              "absolute flex items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground",
+              collapsed ? "right-0 top-0 h-4 w-4 text-[10px]" : "right-3 h-5 min-w-5 px-1.5",
             )}
           >
             {item.badge}
           </span>
         )}
-        {isActive && (
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
-        )}
+        {isActive && <div className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary" />}
       </Link>
     );
 
@@ -89,7 +98,7 @@ export function Sidebar() {
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
           <TooltipContent side="right" className="font-medium">
-            {item.label}
+            {item.comingSoon ? `${item.label} (não criado)` : item.label}
             {item.badge && ` (${item.badge})`}
           </TooltipContent>
         </Tooltip>
@@ -102,31 +111,27 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'h-screen flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 relative',
-        collapsed ? 'w-[72px]' : 'w-64'
+        "relative flex h-screen flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300",
+        collapsed ? "w-[72px]" : "w-64",
       )}
     >
-      {/* Logo */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
+      <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
         <Link to="/" className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-gradient-primary flex items-center justify-center flex-shrink-0">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-primary">
             <Car className="h-5 w-5 text-primary-foreground" />
           </div>
           {!collapsed && (
             <div className="flex flex-col">
               <span className="font-bold text-foreground">ValetTracker</span>
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                Sistema de Gestão
-              </span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Sistema de Gestão</span>
             </div>
           )}
         </Link>
       </div>
 
-      {/* Location Selector */}
       {!collapsed && (
-        <div className="px-3 py-4 border-b border-sidebar-border">
-          <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+        <div className="border-b border-sidebar-border px-3 py-4">
+          <button className="flex w-full items-center gap-3 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted">
             <Building2 className="h-4 w-4 text-muted-foreground" />
             <div className="flex-1 text-left">
               <p className="text-sm font-medium">Shopping Center Norte</p>
@@ -137,26 +142,23 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Main Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {mainNavItems.map((item) => (
-          <NavLink key={item.href} item={item} />
+          <NavItemLink key={item.href} item={item} />
         ))}
       </nav>
 
-      {/* Bottom Navigation */}
-      <div className="px-3 py-4 border-t border-sidebar-border space-y-1">
+      <div className="space-y-1 border-t border-sidebar-border px-3 py-4">
         {bottomNavItems.map((item) => (
-          <NavLink key={item.href} item={item} />
+          <NavItemLink key={item.href} item={item} />
         ))}
       </div>
 
-      {/* User Profile */}
-      <div className="px-3 py-4 border-t border-sidebar-border">
+      <div className="border-t border-sidebar-border px-3 py-4">
         <div
           className={cn(
-            'flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer',
-            collapsed && 'justify-center px-0'
+            "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-muted/50",
+            collapsed && "justify-center px-0",
           )}
         >
           <Avatar className="h-9 w-9 flex-shrink-0">
@@ -164,9 +166,19 @@ export function Sidebar() {
             <AvatarFallback>AD</AvatarFallback>
           </Avatar>
           {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">Pedro</p>
-              <p className="text-xs text-muted-foreground truncate">Administrador</p>
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="truncate text-sm font-medium">{user.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{getRoleDisplayName(user.role)}</p>
+              <Select value={user.role} onValueChange={(value) => setRole(value as UserRole)}>
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="attendant">Manobrista</SelectItem>
+                  <SelectItem value="cashier">Caixa</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           )}
           {!collapsed && (
@@ -177,18 +189,13 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Collapse Toggle */}
       <Button
         variant="ghost"
         size="icon"
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-20 h-6 w-6 rounded-full bg-sidebar border border-sidebar-border shadow-md hover:bg-muted"
+        className="absolute -right-3 top-20 h-6 w-6 rounded-full border border-sidebar-border bg-sidebar shadow-md hover:bg-muted"
       >
-        {collapsed ? (
-          <ChevronRight className="h-3 w-3" />
-        ) : (
-          <ChevronLeft className="h-3 w-3" />
-        )}
+        {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
       </Button>
     </aside>
   );

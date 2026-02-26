@@ -86,6 +86,15 @@ export interface OccupancyData {
   occupancy: number;
 }
 
+export interface Activity {
+  id: string;
+  type: "entry" | "exit" | "payment" | "alert" | "request";
+  title: string;
+  description: string;
+  time: string;
+  plate?: string;
+}
+
 export interface Client {
   id: string;
   name: string;

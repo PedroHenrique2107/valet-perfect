@@ -1,50 +1,54 @@
-import { MainLayout } from '@/components/layout/MainLayout';
-import { StatCard } from '@/components/dashboard/StatCard';
-import { RevenueChart } from '@/components/dashboard/RevenueChart';
-import { mockRevenueData, mockTransactions, mockDashboardStats } from '@/data/mockData';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
-  DollarSign,
-  TrendingUp,
-  CreditCard,
-  Receipt,
-  Download,
   Calendar,
-  ArrowUpRight,
-  ArrowDownRight,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+  CreditCard,
+  DollarSign,
+  Download,
+  Receipt,
+  TrendingUp,
+} from "lucide-react";
+import { RevenueChart } from "@/components/dashboard/RevenueChart";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { MainLayout } from "@/components/layout/MainLayout";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  useDashboardStatsQuery,
+  useRevenueDataQuery,
+  useTransactionsQuery,
+} from "@/hooks/useValetData";
+import { formatCurrencyBRL, formatDateTimeBR, formatDurationMinutes } from "@/lib/format";
 
 const paymentMethodLabels = {
-  pix: 'PIX',
-  credit: 'Crédito',
-  debit: 'Débito',
-  cash: 'Dinheiro',
-  monthly: 'Mensalista',
+  pix: "PIX",
+  credit: "Crédito",
+  debit: "Débito",
+  cash: "Dinheiro",
+  monthly: "Mensalista",
 };
 
 const paymentStatusConfig = {
-  pending: { label: 'Pendente', className: 'status-busy' },
-  completed: { label: 'Concluído', className: 'status-available' },
-  failed: { label: 'Falhou', className: 'status-occupied' },
-  refunded: { label: 'Estornado', className: 'bg-muted text-muted-foreground' },
+  pending: { label: "Pendente", className: "status-busy" },
+  completed: { label: "Concluído", className: "status-available" },
+  failed: { label: "Falhou", className: "status-occupied" },
+  refunded: { label: "Estornado", className: "bg-muted text-muted-foreground" },
 };
 
 export default function FinancialPage() {
-  const totalWeekRevenue = mockRevenueData.reduce((acc, d) => acc + d.revenue, 0);
-  const avgTicket = totalWeekRevenue / mockRevenueData.reduce((acc, d) => acc + d.transactions, 0);
+  const { data: dashboardStats } = useDashboardStatsQuery();
+  const { data: revenueData = [] } = useRevenueDataQuery();
+  const { data: transactions = [] } = useTransactionsQuery();
+
+  const totalWeekRevenue = revenueData.reduce((acc, item) => acc + item.revenue, 0);
+  const transactionCount = revenueData.reduce((acc, item) => acc + item.transactions, 0);
+  const avgTicket = transactionCount > 0 ? totalWeekRevenue / transactionCount : 0;
 
   return (
     <MainLayout>
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="space-y-6 p-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Financeiro</h1>
-            <p className="text-muted-foreground">
-              Acompanhe receitas, despesas e transações
-            </p>
+            <p className="text-muted-foreground">Acompanhe receitas, despesas e transações</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="gap-2">
@@ -58,50 +62,42 @@ export default function FinancialPage() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Receita Hoje"
-            value={`R$ ${mockDashboardStats.todayRevenue.toLocaleString('pt-BR')}`}
+            value={formatCurrencyBRL(dashboardStats?.todayRevenue ?? 0)}
             icon={DollarSign}
             trend={{ value: 15.3, isPositive: true }}
             variant="success"
           />
           <StatCard
             title="Receita Semanal"
-            value={`R$ ${totalWeekRevenue.toLocaleString('pt-BR')}`}
+            value={formatCurrencyBRL(totalWeekRevenue)}
             icon={TrendingUp}
             trend={{ value: 12.5, isPositive: true }}
             variant="primary"
           />
-          <StatCard
-            title="Ticket Médio"
-            value={`R$ ${avgTicket.toFixed(2)}`}
-            icon={Receipt}
-            variant="info"
-          />
+          <StatCard title="Ticket Médio" value={formatCurrencyBRL(avgTicket)} icon={Receipt} variant="info" />
           <StatCard
             title="Transações Hoje"
-            value="59"
+            value={transactionCount}
             icon={CreditCard}
             trend={{ value: 8.2, isPositive: true }}
             variant="default"
           />
         </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <RevenueChart data={mockRevenueData} />
+            <RevenueChart data={revenueData} />
           </div>
-          
-          {/* Payment Methods Breakdown */}
+
           <div className="stat-card">
-            <h3 className="font-semibold text-foreground mb-4">Por Forma de Pagamento</h3>
+            <h3 className="mb-4 font-semibold text-foreground">Por Forma de Pagamento</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-primary" />
+                  <div className="h-3 w-3 rounded-full bg-primary" />
                   <span className="text-sm text-muted-foreground">PIX</span>
                 </div>
                 <div className="text-right">
@@ -111,7 +107,7 @@ export default function FinancialPage() {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-info" />
+                  <div className="h-3 w-3 rounded-full bg-info" />
                   <span className="text-sm text-muted-foreground">Cartão de Crédito</span>
                 </div>
                 <div className="text-right">
@@ -121,7 +117,7 @@ export default function FinancialPage() {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-accent" />
+                  <div className="h-3 w-3 rounded-full bg-accent" />
                   <span className="text-sm text-muted-foreground">Cartão de Débito</span>
                 </div>
                 <div className="text-right">
@@ -131,7 +127,7 @@ export default function FinancialPage() {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-warning" />
+                  <div className="h-3 w-3 rounded-full bg-warning" />
                   <span className="text-sm text-muted-foreground">Dinheiro</span>
                 </div>
                 <div className="text-right">
@@ -143,9 +139,8 @@ export default function FinancialPage() {
           </div>
         </div>
 
-        {/* Recent Transactions */}
         <div className="stat-card">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <h3 className="font-semibold text-foreground">Transações Recentes</h3>
             <Button variant="ghost" size="sm" className="text-primary">
               Ver todas
@@ -164,7 +159,7 @@ export default function FinancialPage() {
                 </tr>
               </thead>
               <tbody>
-                {mockTransactions.map((transaction) => {
+                {transactions.map((transaction) => {
                   const status = paymentStatusConfig[transaction.status];
                   return (
                     <tr key={transaction.id}>
@@ -173,17 +168,15 @@ export default function FinancialPage() {
                       </td>
                       <td>
                         <span className="font-semibold text-foreground">
-                          R$ {transaction.amount.toFixed(2)}
+                          {formatCurrencyBRL(transaction.amount)}
                         </span>
                       </td>
                       <td>
-                        <Badge variant="outline">
-                          {paymentMethodLabels[transaction.paymentMethod]}
-                        </Badge>
+                        <Badge variant="outline">{paymentMethodLabels[transaction.paymentMethod]}</Badge>
                       </td>
                       <td>
                         <span className="text-muted-foreground">
-                          {Math.floor(transaction.duration / 60)}h {transaction.duration % 60}min
+                          {formatDurationMinutes(transaction.duration)}
                         </span>
                       </td>
                       <td>
@@ -193,11 +186,7 @@ export default function FinancialPage() {
                       </td>
                       <td>
                         <span className="text-sm text-muted-foreground">
-                          {transaction.createdAt.toLocaleDateString('pt-BR')}{' '}
-                          {transaction.createdAt.toLocaleTimeString('pt-BR', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatDateTimeBR(transaction.createdAt)}
                         </span>
                       </td>
                     </tr>

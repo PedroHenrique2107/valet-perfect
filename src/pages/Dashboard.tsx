@@ -1,60 +1,100 @@
-import { 
-  Car, 
-  ParkingSquare, 
-  DollarSign, 
-  Clock, 
-  Users, 
-  Timer,
-  AlertTriangle,
-  TrendingUp,
-} from 'lucide-react';
-import { StatCard } from '@/components/dashboard/StatCard';
-import { VehicleStatusCard } from '@/components/dashboard/VehicleStatusCard';
-import { AttendantCard } from '@/components/dashboard/AttendantCard';
-import { RevenueChart } from '@/components/dashboard/RevenueChart';
-import { OccupancyChart } from '@/components/dashboard/OccupancyChart';
-import { ParkingMap } from '@/components/dashboard/ParkingMap';
-import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
-import { QuickActions } from '@/components/dashboard/QuickActions';
+import { useState } from "react";
 import {
-  mockVehicles,
-  mockAttendants,
-  mockParkingSpots,
-  mockDashboardStats,
-  mockRevenueData,
-  mockOccupancyData,
-} from '@/data/mockData';
+  AlertTriangle,
+  Car,
+  Clock,
+  DollarSign,
+  ParkingSquare,
+  Timer,
+  TrendingUp,
+  Users,
+} from "lucide-react";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+import { AttendantCard } from "@/components/dashboard/AttendantCard";
+import { OccupancyChart } from "@/components/dashboard/OccupancyChart";
+import { ParkingMap } from "@/components/dashboard/ParkingMap";
+import { QuickActions } from "@/components/dashboard/QuickActions";
+import { RevenueChart } from "@/components/dashboard/RevenueChart";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { VehicleStatusCard } from "@/components/dashboard/VehicleStatusCard";
+import { AssignTaskDialog } from "@/components/forms/AssignTaskDialog";
+import { ClientCreateDialog } from "@/components/forms/ClientCreateDialog";
+import { VehicleEntryDialog } from "@/components/forms/VehicleEntryDialog";
+import { VehicleExitDialog } from "@/components/forms/VehicleExitDialog";
+import {
+  useActivitiesQuery,
+  useAttendantsQuery,
+  useDashboardStatsQuery,
+  useOccupancyDataQuery,
+  useParkingSpotsQuery,
+  useRequestVehicleMutation,
+  useRevenueDataQuery,
+  useVehiclesQuery,
+} from "@/hooks/useValetData";
+import { useCan } from "@/contexts/AuthContext";
+import { formatCurrencyBRL, formatDurationMinutes, formatTimeBR } from "@/lib/format";
+import type { Attendant, Vehicle } from "@/types/valet";
 
 export default function Dashboard() {
-  const stats = mockDashboardStats;
-  const requestedVehicles = mockVehicles.filter((v) => v.status === 'requested' || v.status === 'in_transit');
-  const activeAttendants = mockAttendants.filter((a) => a.isOnline);
+  const { data: stats } = useDashboardStatsQuery();
+  const { data: vehicles = [] } = useVehiclesQuery();
+  const { data: attendants = [] } = useAttendantsQuery();
+  const { data: parkingSpots = [] } = useParkingSpotsQuery();
+  const { data: revenueData = [] } = useRevenueDataQuery();
+  const { data: occupancyData = [] } = useOccupancyDataQuery();
+  const { data: activities = [] } = useActivitiesQuery();
+  const requestVehicle = useRequestVehicleMutation();
+
+  const canCreateVehicle = useCan("create_vehicle");
+  const canRegisterExit = useCan("register_exit");
+  const canAssignTask = useCan("assign_task");
+  const canCreateClient = useCan("create_client");
+
+  const [entryOpen, setEntryOpen] = useState(false);
+  const [exitOpen, setExitOpen] = useState(false);
+  const [clientOpen, setClientOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [selectedAttendant, setSelectedAttendant] = useState<Attendant | null>(null);
+
+  const requestedVehicles = vehicles.filter(
+    (vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit",
+  );
+  const activeAttendants = attendants.filter((attendant) => attendant.isOnline);
+
+  if (!stats) {
+    return <div className="p-6 text-sm text-muted-foreground">Carregando dashboard...</div>;
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 p-6">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Bem-vindo de volta! Aqui está o resumo de hoje.
-          </p>
+          <p className="text-muted-foreground">Bem-vindo de volta. Aqui está o resumo de hoje.</p>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
             <span>Sistema online</span>
           </div>
           <span className="text-border">•</span>
-          <span>Atualizado às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span>Atualizado às {formatTimeBR(new Date())}</span>
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <QuickActions />
+      <QuickActions
+        permissions={{
+          createVehicle: canCreateVehicle,
+          registerExit: canRegisterExit,
+          createClient: canCreateClient,
+        }}
+        onNewEntry={() => setEntryOpen(true)}
+        onRegisterExit={() => setExitOpen(true)}
+        onCreateClient={() => setClientOpen(true)}
+      />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Veículos Hoje"
           value={stats.totalVehicles}
@@ -72,7 +112,7 @@ export default function Dashboard() {
         />
         <StatCard
           title="Receita Hoje"
-          value={`R$ ${stats.todayRevenue.toLocaleString('pt-BR')}`}
+          value={formatCurrencyBRL(stats.todayRevenue)}
           subtitle="Ticket médio R$ 42,50"
           icon={DollarSign}
           trend={{ value: 15.3, isPositive: true }}
@@ -80,104 +120,111 @@ export default function Dashboard() {
         />
         <StatCard
           title="Tempo Médio"
-          value={`${Math.floor(stats.avgStayDuration / 60)}h ${stats.avgStayDuration % 60}min`}
+          value={formatDurationMinutes(stats.avgStayDuration)}
           subtitle="De permanência"
           icon={Clock}
           variant="warning"
         />
       </div>
 
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Manobristas Ativos"
-          value={stats.activeAttendants}
-          subtitle="De 6 no turno"
-          icon={Users}
-          variant="default"
-        />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard title="Manobristas Ativos" value={stats.activeAttendants} subtitle="De 6 no turno" icon={Users} />
         <StatCard
           title="Veículos Aguardando"
           value={stats.vehiclesWaiting}
           subtitle="Na fila de saída"
           icon={Timer}
-          variant={stats.vehiclesWaiting > 5 ? 'warning' : 'default'}
+          variant={stats.vehiclesWaiting > 5 ? "warning" : "default"}
         />
         <StatCard
           title="Tempo de Espera"
           value={`${stats.avgWaitTime} min`}
           subtitle="Média de espera"
           icon={AlertTriangle}
-          variant={stats.avgWaitTime > 5 ? 'warning' : 'success'}
+          variant={stats.avgWaitTime > 5 ? "warning" : "success"}
         />
-        <StatCard
-          title="Performance"
-          value="94%"
-          subtitle="Índice de eficiência"
-          icon={TrendingUp}
-          variant="success"
-        />
+        <StatCard title="Performance" value="94%" subtitle="Índice de eficiência" icon={TrendingUp} variant="success" />
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Charts */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <RevenueChart data={mockRevenueData} />
-            <OccupancyChart data={mockOccupancyData} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <RevenueChart data={revenueData} />
+            <OccupancyChart data={occupancyData} />
           </div>
-          
-          {/* Parking Map */}
-          <ParkingMap spots={mockParkingSpots} />
+          <ParkingMap spots={parkingSpots} />
         </div>
-
-        {/* Activity Feed */}
         <div className="lg:col-span-1">
-          <ActivityFeed />
+          <ActivityFeed activities={activities} />
         </div>
       </div>
 
-      {/* Vehicles & Attendants */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Requested Vehicles */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-foreground">Veículos em Atendimento</h2>
               <p className="text-sm text-muted-foreground">Solicitados e em trânsito</p>
             </div>
             <button className="text-sm text-primary hover:underline">Ver todos</button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {requestedVehicles.length > 0 ? (
               requestedVehicles.map((vehicle) => (
-                <VehicleStatusCard key={vehicle.id} vehicle={vehicle} />
+                <VehicleStatusCard
+                  key={vehicle.id}
+                  vehicle={vehicle}
+                  canRequest={canCreateVehicle}
+                  canRegisterExit={canRegisterExit}
+                  onRequestVehicle={(item) => requestVehicle.mutate(item.id)}
+                  onRegisterExit={(item) => {
+                    setSelectedVehicle(item);
+                    setExitOpen(true);
+                  }}
+                />
               ))
             ) : (
-              <div className="col-span-2 text-center py-8 text-muted-foreground">
-                Nenhum veículo aguardando
-              </div>
+              <div className="col-span-2 py-8 text-center text-muted-foreground">Nenhum veículo aguardando</div>
             )}
           </div>
         </div>
 
-        {/* Active Attendants */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-foreground">Manobristas do Turno</h2>
               <p className="text-sm text-muted-foreground">{activeAttendants.length} ativos agora</p>
             </div>
             <button className="text-sm text-primary hover:underline">Ver todos</button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {activeAttendants.slice(0, 4).map((attendant) => (
-              <AttendantCard key={attendant.id} attendant={attendant} />
+              <AttendantCard
+                key={attendant.id}
+                attendant={attendant}
+                canAssignTask={canAssignTask}
+                onAssignTask={(item) => {
+                  setSelectedAttendant(item);
+                  setAssignOpen(true);
+                }}
+              />
             ))}
           </div>
         </div>
       </div>
+
+      <VehicleEntryDialog open={entryOpen} onOpenChange={setEntryOpen} />
+      <VehicleExitDialog
+        open={exitOpen}
+        onOpenChange={setExitOpen}
+        initialVehicleId={selectedVehicle?.id}
+      />
+      <ClientCreateDialog open={clientOpen} onOpenChange={setClientOpen} />
+      <AssignTaskDialog
+        open={assignOpen}
+        onOpenChange={setAssignOpen}
+        initialAttendantId={selectedAttendant?.id}
+      />
     </div>
   );
 }

@@ -1,54 +1,42 @@
-import { RevenueData } from '@/types/valet';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { formatCurrencyBRL } from "@/lib/format";
+import type { RevenueData } from "@/types/valet";
 
 interface RevenueChartProps {
   data: RevenueData[];
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 0,
-  }).format(value);
+interface RevenueTooltipProps {
+  active?: boolean;
+  label?: string;
+  payload?: Array<{ value: number; payload: RevenueData }>;
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="rounded-lg border border-border bg-popover p-3 shadow-lg">
-        <p className="text-sm font-medium text-foreground mb-1">{label}</p>
-        <p className="text-lg font-bold text-primary">
-          {formatCurrency(payload[0].value)}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {payload[0].payload.transactions} transações
-        </p>
-      </div>
-    );
+function CustomTooltip({ active, payload, label }: RevenueTooltipProps) {
+  if (!active || !payload || payload.length === 0) {
+    return null;
   }
-  return null;
-};
+
+  return (
+    <div className="rounded-lg border border-border bg-popover p-3 shadow-lg">
+      <p className="mb-1 text-sm font-medium text-foreground">{label}</p>
+      <p className="text-lg font-bold text-primary">{formatCurrencyBRL(payload[0].value)}</p>
+      <p className="text-xs text-muted-foreground">{payload[0].payload.transactions} transações</p>
+    </div>
+  );
+}
 
 export function RevenueChart({ data }: RevenueChartProps) {
   return (
     <div className="stat-card h-[300px]">
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-foreground">Receita Semanal</h3>
           <p className="text-sm text-muted-foreground">Últimos 7 dias</p>
         </div>
         <div className="text-right">
           <p className="text-2xl font-bold text-foreground">
-            {formatCurrency(data.reduce((acc, d) => acc + d.revenue, 0))}
+            {formatCurrencyBRL(data.reduce((acc, item) => acc + item.revenue, 0))}
           </p>
           <p className="text-sm text-success">+12.5% vs semana anterior</p>
         </div>
@@ -61,21 +49,17 @@ export function RevenueChart({ data }: RevenueChartProps) {
               <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="hsl(217, 33%, 17%)"
-            vertical={false}
-          />
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(217, 33%, 17%)" vertical={false} />
           <XAxis
             dataKey="date"
             axisLine={false}
             tickLine={false}
-            tick={{ fill: 'hsl(215, 20%, 55%)', fontSize: 12 }}
+            tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 12 }}
           />
           <YAxis
             axisLine={false}
             tickLine={false}
-            tick={{ fill: 'hsl(215, 20%, 55%)', fontSize: 12 }}
+            tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 12 }}
             tickFormatter={(value) => `${value / 1000}k`}
           />
           <Tooltip content={<CustomTooltip />} />
