@@ -111,7 +111,8 @@ export function PrepaidChargeDialog({
               <SelectItem value="credit">Credito</SelectItem>
               <SelectItem value="debit">Debito</SelectItem>
               <SelectItem value="cash">Dinheiro</SelectItem>
-              <SelectItem value="monthly">Mensalista</SelectItem>
+              <SelectItem value="semparar">SemParar</SelectItem>
+              <SelectItem value="monthly" disabled className="line-through">Mensalista (em breve)</SelectItem>
             </SelectContent>
           </Select>
         </div>

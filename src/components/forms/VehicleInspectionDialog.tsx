@@ -1,10 +1,12 @@
-import {
+﻿import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { formatDateTimeBR } from "@/lib/format";
 import type { Vehicle } from "@/types/valet";
 
 interface VehicleInspectionDialogProps {
@@ -13,10 +15,20 @@ interface VehicleInspectionDialogProps {
   vehicle: Vehicle | null;
 }
 
+const checklistItems = [
+  { key: "leftSide", label: "Lado esquerdo (arranhoes?)" },
+  { key: "rightSide", label: "Lado direito" },
+  { key: "frontBumper", label: "Para-choque dianteiro" },
+  { key: "rearBumper", label: "Para-choque traseiro" },
+  { key: "wheels", label: "Rodas" },
+  { key: "mirrors", label: "Retrovisores" },
+  { key: "roof", label: "Teto" },
+  { key: "windows", label: "Vidros" },
+  { key: "interior", label: "Interior" },
+] as const;
+
 export function VehicleInspectionDialog({ open, onOpenChange, vehicle }: VehicleInspectionDialogProps) {
-  if (!vehicle) {
-    return null;
-  }
+  if (!vehicle) return null;
 
   const inspection = vehicle.inspection;
 
@@ -25,20 +37,20 @@ export function VehicleInspectionDialog({ open, onOpenChange, vehicle }: Vehicle
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Vistoria - {vehicle.plate}</DialogTitle>
-          <DialogDescription>Checklist visual registrado no momento da entrada.</DialogDescription>
+          <DialogDescription>Checklist obrigatorio do registro de entrada.</DialogDescription>
         </DialogHeader>
 
         {inspection ? (
-          <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-            <Field label="Lado esquerdo (arranhoes?)" value={inspection.leftSide} />
-            <Field label="Lado direito" value={inspection.rightSide} />
-            <Field label="Para-choque dianteiro" value={inspection.frontBumper} />
-            <Field label="Para-choque traseiro" value={inspection.rearBumper} />
-            <Field label="Rodas" value={inspection.wheels} />
-            <Field label="Retrovisores" value={inspection.mirrors} />
-            <Field label="Teto" value={inspection.roof} />
-            <Field label="Vidros" value={inspection.windows} />
-            <Field label="Interior" value={inspection.interior} />
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+              {checklistItems.map((item) => (
+                <label key={item.key} className="flex items-center gap-2 rounded border p-2">
+                  <Checkbox checked={inspection[item.key]} disabled />
+                  <span>{item.label}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Vistoria finalizada em {formatDateTimeBR(inspection.completedAt)}</p>
           </div>
         ) : (
           <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
@@ -47,14 +59,5 @@ export function VehicleInspectionDialog({ open, onOpenChange, vehicle }: Vehicle
         )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border p-2">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium">{value}</p>
-    </div>
   );
 }

@@ -5,6 +5,7 @@ export interface AgreementOption {
 }
 
 export const DEFAULT_UNIT_NAME = "Shopping Center Norte";
+export const COMPANY_NAME = "Valet Perfect";
 export const PARKING_DAILY_RATE = 65;
 export const PARKING_TABLE_NAME = "Tabela Padrao - Diaria";
 

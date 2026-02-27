@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   BarChart3,
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getRoleDisplayName, useAuth } from "@/contexts/AuthContext";
+import { useVehiclesQuery } from "@/hooks/useValetData";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types/auth";
 
@@ -40,24 +41,29 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
-  { icon: Car, label: "Veículos", href: "/vehicles", badge: 6 },
+  { icon: Car, label: "Veiculos", href: "/vehicles" },
   { icon: Users, label: "Manobristas", href: "/attendants" },
-  { icon: MapPin, label: "Mapa do Pátio", href: "/parking-map" },
+  { icon: MapPin, label: "Mapa do Patio", href: "/parking-map" },
   { icon: Receipt, label: "Financeiro", href: "/financial" },
   { icon: UserCircle, label: "Clientes", href: "/clients", comingSoon: true },
-  { icon: BarChart3, label: "Relatórios", href: "/reports", comingSoon: true },
+  { icon: BarChart3, label: "Relatorios", href: "/reports", comingSoon: true },
   { icon: Calendar, label: "Eventos", href: "/events", comingSoon: true },
 ];
 
 const bottomNavItems: NavItem[] = [
-  { icon: Bell, label: "Notificações", href: "/notifications", badge: 5, comingSoon: true },
-  { icon: Settings, label: "Configurações", href: "/settings", comingSoon: true },
+  { icon: Bell, label: "Notificacoes", href: "/notifications", badge: 5, comingSoon: true },
+  { icon: Settings, label: "Configuracoes", href: "/settings", comingSoon: true },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { user, setRole } = useAuth();
+  const { data: vehicles = [] } = useVehiclesQuery();
+
+  const resolvedMainNavItems = mainNavItems.map((item) =>
+    item.href === "/vehicles" ? { ...item, badge: vehicles.length } : item,
+  );
 
   const NavItemLink = ({ item }: { item: NavItem }) => {
     const isActive = location.pathname === item.href;
@@ -79,7 +85,7 @@ export function Sidebar() {
             {item.label}
           </span>
         )}
-        {item.badge && item.badge > 0 && (
+        {item.badge !== undefined && item.badge > 0 && (
           <span
             className={cn(
               "absolute flex items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground",
@@ -98,8 +104,8 @@ export function Sidebar() {
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
           <TooltipContent side="right" className="font-medium">
-            {item.comingSoon ? `${item.label} (não criado)` : item.label}
-            {item.badge && ` (${item.badge})`}
+            {item.comingSoon ? `${item.label} (nao criado)` : item.label}
+            {item.badge !== undefined && ` (${item.badge})`}
           </TooltipContent>
         </Tooltip>
       );
@@ -123,7 +129,7 @@ export function Sidebar() {
           {!collapsed && (
             <div className="flex flex-col">
               <span className="font-bold text-foreground">ValetTracker</span>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Sistema de Gestão</span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Sistema de Gestao</span>
             </div>
           )}
         </Link>
@@ -135,7 +141,7 @@ export function Sidebar() {
             <Building2 className="h-4 w-4 text-muted-foreground" />
             <div className="flex-1 text-left">
               <p className="text-sm font-medium">Shopping Center Norte</p>
-              <p className="text-xs text-muted-foreground">São Paulo, SP</p>
+              <p className="text-xs text-muted-foreground">Sao Paulo, SP</p>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </button>
@@ -143,7 +149,7 @@ export function Sidebar() {
       )}
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {mainNavItems.map((item) => (
+        {resolvedMainNavItems.map((item) => (
           <NavItemLink key={item.href} item={item} />
         ))}
       </nav>

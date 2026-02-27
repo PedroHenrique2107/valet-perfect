@@ -42,6 +42,7 @@ export interface CreateVehicleInput {
   unitName?: string;
   createInspection?: boolean;
   inspection?: VehicleInspection;
+  hasSemParar?: boolean;
 }
 
 export interface RegisterExitInput {
@@ -215,18 +216,20 @@ export const valetApi = {
       ],
       inspection: input.createInspection
         ? (input.inspection ?? {
-            leftSide: "Sem avarias",
-            rightSide: "Sem avarias",
-            frontBumper: "Sem avarias",
-            rearBumper: "Sem avarias",
-            wheels: "Sem avarias",
-            mirrors: "Sem avarias",
-            roof: "Sem avarias",
-            windows: "Sem avarias",
-            interior: "Sem avarias",
+            leftSide: true,
+            rightSide: true,
+            frontBumper: true,
+            rearBumper: true,
+            wheels: true,
+            mirrors: true,
+            roof: true,
+            windows: true,
+            interior: true,
+            completedAt: new Date(),
           })
         : undefined,
       pricing,
+      hasSemParar: input.hasSemParar ?? false,
     };
 
     vehiclesDb.unshift(newVehicle);

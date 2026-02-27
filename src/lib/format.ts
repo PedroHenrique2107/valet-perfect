@@ -28,3 +28,11 @@ export function formatDurationFromDate(entryTime: Date): string {
   const totalMinutes = Math.floor(diffMs / 60000);
   return formatDurationMinutes(totalMinutes);
 }
+
+export function formatDurationPrecise(totalSeconds: number): string {
+  const safe = Math.max(0, totalSeconds);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}

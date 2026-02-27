@@ -5,7 +5,7 @@ export type ContractType = "hourly" | "daily" | "monthly" | "agreement";
 
 export type AttendantStatus = 'available' | 'busy' | 'break' | 'offline';
 
-export type PaymentMethod = 'pix' | 'credit' | 'debit' | 'cash' | 'monthly';
+export type PaymentMethod = 'pix' | 'credit' | 'debit' | 'cash' | 'monthly' | 'semparar';
 
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 
@@ -32,6 +32,7 @@ export interface Vehicle {
   spotHistory?: SpotHistoryEntry[];
   inspection?: VehicleInspection;
   pricing?: VehiclePricingSnapshot;
+  hasSemParar?: boolean;
 }
 
 export interface SpotHistoryEntry {
@@ -41,15 +42,16 @@ export interface SpotHistoryEntry {
 }
 
 export interface VehicleInspection {
-  leftSide: string;
-  rightSide: string;
-  frontBumper: string;
-  rearBumper: string;
-  wheels: string;
-  mirrors: string;
-  roof: string;
-  windows: string;
-  interior: string;
+  leftSide: boolean;
+  rightSide: boolean;
+  frontBumper: boolean;
+  rearBumper: boolean;
+  wheels: boolean;
+  mirrors: boolean;
+  roof: boolean;
+  windows: boolean;
+  interior: boolean;
+  completedAt: Date;
 }
 
 export interface VehiclePricingSnapshot {

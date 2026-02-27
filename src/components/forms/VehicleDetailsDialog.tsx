@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DEFAULT_UNIT_NAME } from "@/config/pricing";
-import { formatCurrencyBRL, formatDateTimeBR, formatDurationMinutes } from "@/lib/format";
+import { formatCurrencyBRL, formatDateTimeBR, formatDurationPrecise } from "@/lib/format";
 import type { Attendant, Transaction, Vehicle } from "@/types/valet";
 
 interface VehicleDetailsDialogProps {
@@ -19,16 +19,25 @@ interface VehicleDetailsDialogProps {
 }
 
 const contractLabel: Record<string, string> = {
-  hourly: "Avulso por hora",
-  daily: "Diaria",
+  hourly: "Avulso",
+  daily: "Avulso",
   monthly: "Mensalista",
-  agreement: "Convenio",
+  agreement: "Credenciado",
+};
+
+const paymentLabel: Record<string, string> = {
+  pix: "PIX",
+  credit: "Credito",
+  debit: "Debito",
+  cash: "Dinheiro",
+  monthly: "Mensalista",
+  semparar: "SemParar",
 };
 
 const statusLabel: Record<string, string> = {
   parked: "Estacionado",
   requested: "Solicitado",
-  in_transit: "Em transito",
+  in_transit: "Solicitado",
   delivered: "Entregue",
   reserved: "Reservado",
 };
@@ -43,9 +52,7 @@ export function VehicleDetailsDialog({
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    if (!open || !vehicle || vehicle.status === "delivered") {
-      return;
-    }
+    if (!open || !vehicle || vehicle.status === "delivered") return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [open, vehicle]);
@@ -62,13 +69,25 @@ export function VehicleDetailsDialog({
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }, [transactions, vehicle]);
 
-  if (!vehicle) {
-    return null;
-  }
+  if (!vehicle) return null;
 
   const finalTime = vehicle.exitTime?.getTime() ?? now;
-  const totalMinutes = Math.max(0, Math.floor((finalTime - vehicle.entryTime.getTime()) / 60000));
+  const totalSeconds = Math.max(0, Math.floor((finalTime - vehicle.entryTime.getTime()) / 1000));
   const latestTx = vehicleTx[0];
+
+  const inspectionOkList = vehicle.inspection
+    ? [
+        vehicle.inspection.leftSide && "Lado esquerdo",
+        vehicle.inspection.rightSide && "Lado direito",
+        vehicle.inspection.frontBumper && "Para-choque dianteiro",
+        vehicle.inspection.rearBumper && "Para-choque traseiro",
+        vehicle.inspection.wheels && "Rodas",
+        vehicle.inspection.mirrors && "Retrovisores",
+        vehicle.inspection.roof && "Teto",
+        vehicle.inspection.windows && "Vidros",
+        vehicle.inspection.interior && "Interior",
+      ].filter(Boolean)
+    : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -82,12 +101,17 @@ export function VehicleDetailsDialog({
           <Field label="Placa" value={vehicle.plate} />
           <Field label="Cliente" value={vehicle.clientName} />
           <Field label="Telefone" value={vehicle.clientPhone || "-"} />
-          <Field label="Tipo de contrato" value={contractLabel[vehicle.contractType ?? "hourly"]} />
+          <Field
+            label="Tipo de contrato"
+            value={contractLabel[vehicle.contractType ?? "hourly"]}
+            strikethrough={vehicle.contractType === "monthly"}
+          />
           <Field label="Unidade (Nome do patio)" value={vehicle.unitName ?? DEFAULT_UNIT_NAME} />
           <Field label="Operador que recebeu" value={attendantName} />
           <Field label="Data/hora de entrada" value={formatDateTimeBR(vehicle.entryTime)} />
           <Field label="Status atual" value={statusLabel[vehicle.status]} />
-          <Field label="Tempo total no patio (live)" value={formatDurationMinutes(totalMinutes)} />
+          <Field label="Tempo total no patio (live)" value={formatDurationPrecise(totalSeconds)} />
+          <Field label="SemParar" value={vehicle.hasSemParar ? "Cadastrado" : "Nao cadastrado"} />
         </div>
 
         <section className="space-y-2">
@@ -107,6 +131,17 @@ export function VehicleDetailsDialog({
           </div>
         </section>
 
+        <section className="space-y-2">
+          <h4 className="font-semibold">Vistoria (itens positivos)</h4>
+          <div className="rounded-lg border p-3 text-sm">
+            {inspectionOkList.length > 0 ? (
+              <p>{inspectionOkList.join(", ")}</p>
+            ) : (
+              <p className="text-muted-foreground">Sem vistoria registrada.</p>
+            )}
+          </div>
+        </section>
+
         {vehicle.status === "delivered" && (
           <section className="space-y-2">
             <h4 className="font-semibold">Informacoes financeiras</h4>
@@ -118,7 +153,11 @@ export function VehicleDetailsDialog({
               />
               <Field label="Tabela aplicada" value={vehicle.pricing?.tableName ?? "-"} />
               <Field label="Cortesias aplicadas" value={vehicle.pricing?.courtesyApplied ?? "Sem cortesia"} />
-              <Field label="Pagamento" value={latestTx ? latestTx.paymentMethod.toUpperCase() : "-"} />
+              <Field
+                label="Pagamento"
+                value={latestTx ? paymentLabel[latestTx.paymentMethod] ?? latestTx.paymentMethod : "-"}
+                strikethrough={latestTx?.paymentMethod === "monthly"}
+              />
             </div>
           </section>
         )}
@@ -127,11 +166,11 @@ export function VehicleDetailsDialog({
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, strikethrough = false }: { label: string; value: string; strikethrough?: boolean }) {
   return (
     <div className="rounded-md border p-2">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium">{value}</p>
+      <p className={`font-medium ${strikethrough ? "line-through" : ""}`}>{value}</p>
     </div>
   );
 }

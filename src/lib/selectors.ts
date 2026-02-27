@@ -14,7 +14,10 @@ export function filterVehicles(
       vehicle.clientName.toLowerCase().includes(normalized) ||
       vehicle.brand.toLowerCase().includes(normalized) ||
       vehicle.model.toLowerCase().includes(normalized);
-    const matchesStatus = statusFilter === "all" || vehicle.status === statusFilter;
+    const matchesStatus =
+      statusFilter === "all" ||
+      vehicle.status === statusFilter ||
+      (statusFilter === "requested" && vehicle.status === "in_transit");
     return matchesSearch && matchesStatus;
   });
 }

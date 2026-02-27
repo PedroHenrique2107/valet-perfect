@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -21,13 +20,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRegisterVehicleExitMutation, useVehiclesQuery } from "@/hooks/useValetData";
-import { formatCurrencyBRL, formatDurationMinutes } from "@/lib/format";
+import { formatCurrencyBRL, formatDurationPrecise } from "@/lib/format";
 
 const schema = z.object({
   vehicleId: z.string().min(1, "Selecione um veiculo"),
-  paymentMethod: z.enum(["pix", "credit", "debit", "cash", "monthly"]),
+  paymentMethod: z.enum(["pix", "credit", "debit", "cash", "monthly", "semparar"]),
   agreementId: z.string().min(1),
-  amount: z.coerce.number().min(1, "Valor invalido"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -41,6 +39,7 @@ interface VehicleExitDialogProps {
 export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: VehicleExitDialogProps) {
   const { data: vehicles = [] } = useVehiclesQuery();
   const registerExit = useRegisterVehicleExitMutation();
+  const [now, setNow] = useState(Date.now());
 
   const activeVehicles = vehicles.filter((vehicle) => vehicle.status !== "delivered");
 
@@ -50,9 +49,14 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
       vehicleId: initialVehicleId ?? "",
       paymentMethod: "pix",
       agreementId: "none",
-      amount: 45,
     },
   });
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [open]);
 
   useEffect(() => {
     if (initialVehicleId) {
@@ -61,35 +65,21 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
   }, [form, initialVehicleId]);
 
   const selectedVehicle = activeVehicles.find((vehicle) => vehicle.id === form.watch("vehicleId"));
-  const durationMinutes = selectedVehicle
-    ? Math.max(1, Math.round((Date.now() - selectedVehicle.entryTime.getTime()) / 60000))
-    : 0;
+  const durationSeconds = selectedVehicle ? Math.max(1, Math.floor((now - selectedVehicle.entryTime.getTime()) / 1000)) : 0;
+  const durationMinutes = Math.max(1, Math.ceil(durationSeconds / 60));
 
   const pricing = useMemo(() => {
-    if (!selectedVehicle) {
-      return { gross: 0, discount: 0, net: 0 };
-    }
+    if (!selectedVehicle) return { gross: 0, discount: 0, net: 0 };
     return calculateAmountByDuration(durationMinutes, form.watch("agreementId"));
   }, [durationMinutes, form, selectedVehicle]);
-
-  useEffect(() => {
-    if (selectedVehicle) {
-      form.setValue("amount", pricing.net, { shouldValidate: true });
-    }
-  }, [form, pricing.net, selectedVehicle]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     await registerExit.mutateAsync({
       vehicleId: values.vehicleId,
       paymentMethod: values.paymentMethod,
-      amount: values.amount,
+      amount: pricing.net,
     });
-    form.reset({
-      vehicleId: "",
-      paymentMethod: "pix",
-      agreementId: "none",
-      amount: 45,
-    });
+    form.reset({ vehicleId: "", paymentMethod: "pix", agreementId: "none" });
     onOpenChange(false);
   });
 
@@ -98,7 +88,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Registrar Saida</DialogTitle>
-          <DialogDescription>Finalize a permanencia e gere a transacao.</DialogDescription>
+          <DialogDescription>Valor calculado automaticamente pelo tempo registrado.</DialogDescription>
         </DialogHeader>
 
         <form className="space-y-3" onSubmit={onSubmit}>
@@ -123,7 +113,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
               <p><strong>Placa:</strong> {selectedVehicle.plate}</p>
               <p><strong>Cliente:</strong> {selectedVehicle.clientName}</p>
               <p><strong>Telefone:</strong> {selectedVehicle.clientPhone || "-"}</p>
-              <p><strong>Tempo registrado:</strong> {formatDurationMinutes(durationMinutes)}</p>
+              <p><strong>Tempo registrado:</strong> {formatDurationPrecise(durationSeconds)}</p>
             </div>
           )}
 
@@ -145,9 +135,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
 
           <Select
             value={form.watch("paymentMethod")}
-            onValueChange={(value) =>
-              form.setValue("paymentMethod", value as FormValues["paymentMethod"], { shouldValidate: true })
-            }
+            onValueChange={(value) => form.setValue("paymentMethod", value as FormValues["paymentMethod"], { shouldValidate: true })}
           >
             <SelectTrigger>
               <SelectValue placeholder="Forma de pagamento" />
@@ -157,16 +145,15 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
               <SelectItem value="credit">Credito</SelectItem>
               <SelectItem value="debit">Debito</SelectItem>
               <SelectItem value="cash">Dinheiro</SelectItem>
-              <SelectItem value="monthly">Mensalista</SelectItem>
+              <SelectItem value="semparar">SemParar</SelectItem>
+              <SelectItem value="monthly" disabled className="line-through">Mensalista (em breve)</SelectItem>
             </SelectContent>
           </Select>
-
-          <Input type="number" min={1} step="0.01" placeholder="Valor" {...form.register("amount")} />
 
           <div className="rounded-md border bg-muted/30 p-3 text-xs">
             <p>Valor bruto: {formatCurrencyBRL(pricing.gross)}</p>
             <p>Desconto convenio: {formatCurrencyBRL(pricing.discount)}</p>
-            <p><strong>Valor sugerido:</strong> {formatCurrencyBRL(pricing.net)}</p>
+            <p><strong>Valor final:</strong> {formatCurrencyBRL(pricing.net)}</p>
           </div>
 
           {Object.values(form.formState.errors).length > 0 && (
@@ -174,10 +161,8 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={registerExit.isPending}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button type="submit" disabled={registerExit.isPending || !selectedVehicle}>
               {registerExit.isPending ? "Salvando..." : "Registrar Saida"}
             </Button>
           </DialogFooter>

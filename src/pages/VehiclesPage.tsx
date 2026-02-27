@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { Car, Grid3X3, List, Plus, Search, Trash2 } from "lucide-react";
+import { COMPANY_NAME, DEFAULT_UNIT_NAME } from "@/config/pricing";
 import { VehicleStatusCard } from "@/components/dashboard/VehicleStatusCard";
 import { VehicleDetailsDialog } from "@/components/forms/VehicleDetailsDialog";
 import { VehicleEntryDialog } from "@/components/forms/VehicleEntryDialog";
@@ -25,7 +26,6 @@ const statusFilters: { value: VehicleStatus | "all"; label: string }[] = [
   { value: "all", label: "Todos" },
   { value: "parked", label: "Estacionados" },
   { value: "requested", label: "Solicitados" },
-  { value: "in_transit", label: "Em Transito" },
   { value: "reserved", label: "Reservados" },
   { value: "delivered", label: "Entregues" },
 ];
@@ -54,15 +54,23 @@ export default function VehiclesPage() {
   const statusCounts = {
     all: vehicles.length,
     parked: vehicles.filter((vehicle) => vehicle.status === "parked").length,
-    requested: vehicles.filter((vehicle) => vehicle.status === "requested").length,
-    in_transit: vehicles.filter((vehicle) => vehicle.status === "in_transit").length,
+    requested: vehicles.filter((vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit").length,
     reserved: vehicles.filter((vehicle) => vehicle.status === "reserved").length,
     delivered: vehicles.filter((vehicle) => vehicle.status === "delivered").length,
   };
 
+  const sendSmsToClient = (vehicle: Vehicle) => {
+    if (!vehicle.clientPhone) return;
+
+    const phone = vehicle.clientPhone.replace(/\D/g, "");
+    const message = `${COMPANY_NAME} - ${DEFAULT_UNIT_NAME}: Seu veiculo ja esta disponivel para retirada. Estamos aguardando voce!`;
+    const smsUrl = `sms:${phone}?body=${encodeURIComponent(message)}`;
+    window.open(smsUrl, "_self");
+  };
+
   return (
     <MainLayout>
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 p-6">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Veiculos</h1>
@@ -94,7 +102,7 @@ export default function VehiclesPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar por placa, cliente, marca ou modelo..."
+                placeholder="Buscar por placa, cliente ou modelo..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="pl-10"
@@ -148,52 +156,49 @@ export default function VehiclesPage() {
         </div>
 
         {filteredVehicles.length > 0 ? (
-          <div
-            className={cn(
-              viewMode === "grid"
-                ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                : "space-y-3",
-            )}
-          >
-            {filteredVehicles.map((vehicle) => (
-              <VehicleStatusCard
-                key={vehicle.id}
-                vehicle={vehicle}
-                canRequest={canCreateVehicle}
-                canRegisterExit={canRegisterExit}
-                onRequestVehicle={(item) => requestVehicle.mutate(item.id)}
-                onViewDetails={(item) => {
-                  setSelectedVehicle(item);
-                  setDetailsOpen(true);
-                }}
-                onViewInspection={(item) => {
-                  setSelectedVehicle(item);
-                  setInspectionOpen(true);
-                }}
-                onRegisterExit={(item) => {
-                  setSelectedVehicle(item);
-                  setExitOpen(true);
-                }}
-              />
-            ))}
+          <div className="max-h-[calc(100vh-260px)] overflow-y-auto pr-2">
+            <div
+              className={cn(
+                viewMode === "grid"
+                  ? "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                  : "space-y-2",
+              )}
+            >
+              {filteredVehicles.map((vehicle) => (
+                <VehicleStatusCard
+                  key={vehicle.id}
+                  vehicle={vehicle}
+                  canRequest={canCreateVehicle}
+                  canRegisterExit={canRegisterExit}
+                  onRequestVehicle={(item) => requestVehicle.mutate(item.id)}
+                  onSendSms={sendSmsToClient}
+                  onViewDetails={(item) => {
+                    setSelectedVehicle(item);
+                    setDetailsOpen(true);
+                  }}
+                  onViewInspection={(item) => {
+                    setSelectedVehicle(item);
+                    setInspectionOpen(true);
+                  }}
+                  onRegisterExit={(item) => {
+                    setSelectedVehicle(item);
+                    setExitOpen(true);
+                  }}
+                />
+              ))}
+            </div>
           </div>
         ) : (
           <div className="stat-card flex flex-col items-center justify-center py-16">
             <Car className="mb-4 h-12 w-12 text-muted-foreground" />
             <h3 className="mb-1 text-lg font-semibold text-foreground">Nenhum veiculo encontrado</h3>
-            <p className="text-sm text-muted-foreground">
-              Tente ajustar os filtros ou realizar uma nova busca
-            </p>
+            <p className="text-sm text-muted-foreground">Tente ajustar os filtros ou realizar uma nova busca</p>
           </div>
         )}
       </div>
 
       <VehicleEntryDialog open={entryOpen} onOpenChange={setEntryOpen} />
-      <VehicleExitDialog
-        open={exitOpen}
-        onOpenChange={setExitOpen}
-        initialVehicleId={selectedVehicle?.id}
-      />
+      <VehicleExitDialog open={exitOpen} onOpenChange={setExitOpen} initialVehicleId={selectedVehicle?.id} />
       <VehicleDetailsDialog
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
@@ -201,11 +206,7 @@ export default function VehiclesPage() {
         attendants={attendants}
         transactions={transactions}
       />
-      <VehicleInspectionDialog
-        open={inspectionOpen}
-        onOpenChange={setInspectionOpen}
-        vehicle={selectedVehicle}
-      />
+      <VehicleInspectionDialog open={inspectionOpen} onOpenChange={setInspectionOpen} vehicle={selectedVehicle} />
     </MainLayout>
   );
 }
