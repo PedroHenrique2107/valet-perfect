@@ -1,6 +1,7 @@
 // ValetTrack Type Definitions
 
 export type VehicleStatus = 'parked' | 'requested' | 'in_transit' | 'delivered' | 'reserved';
+export type ContractType = "hourly" | "daily" | "monthly" | "agreement";
 
 export type AttendantStatus = 'available' | 'busy' | 'break' | 'offline';
 
@@ -26,6 +27,36 @@ export interface Vehicle {
   photos?: string[];
   fuelLevel?: number;
   mileage?: number;
+  contractType?: ContractType;
+  unitName?: string;
+  spotHistory?: SpotHistoryEntry[];
+  inspection?: VehicleInspection;
+  pricing?: VehiclePricingSnapshot;
+}
+
+export interface SpotHistoryEntry {
+  spotId: string;
+  changedAt: Date;
+  changedBy: string;
+}
+
+export interface VehicleInspection {
+  leftSide: string;
+  rightSide: string;
+  frontBumper: string;
+  rearBumper: string;
+  wheels: string;
+  mirrors: string;
+  roof: string;
+  windows: string;
+  interior: string;
+}
+
+export interface VehiclePricingSnapshot {
+  tableName: string;
+  dailyRate: number;
+  agreementLabel?: string;
+  courtesyApplied?: string;
 }
 
 export interface Attendant {

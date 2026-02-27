@@ -18,6 +18,8 @@ interface VehicleStatusCardProps {
   canRegisterExit?: boolean;
   onRequestVehicle?: (vehicle: Vehicle) => void;
   onRegisterExit?: (vehicle: Vehicle) => void;
+  onViewDetails?: (vehicle: Vehicle) => void;
+  onViewInspection?: (vehicle: Vehicle) => void;
 }
 
 const statusConfig = {
@@ -35,6 +37,8 @@ export function VehicleStatusCard({
   canRegisterExit = true,
   onRequestVehicle,
   onRegisterExit,
+  onViewDetails,
+  onViewInspection,
 }: VehicleStatusCardProps) {
   const status = statusConfig[vehicle.status];
 
@@ -67,8 +71,8 @@ export function VehicleStatusCard({
             <DropdownMenuItem disabled={!canRequest} onClick={() => onRequestVehicle?.(vehicle)}>
               Solicitar veículo
             </DropdownMenuItem>
-            <DropdownMenuItem>Ver detalhes</DropdownMenuItem>
-            <DropdownMenuItem>Ver vistoria</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewDetails?.(vehicle)}>Ver detalhes</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewInspection?.(vehicle)}>Ver vistoria</DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive"
               disabled={!canRegisterExit}

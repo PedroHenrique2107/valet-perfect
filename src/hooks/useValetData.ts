@@ -15,6 +15,7 @@ const ALL_KEYS = [
   "parking-spots",
   "transactions",
   "revenue",
+  "occupancy",
   "dashboard-stats",
   "activities",
   "clients",
@@ -142,6 +143,14 @@ export function useCreateClientMutation() {
   const invalidate = useInvalidateCoreQueries();
   return useMutation({
     mutationFn: (input: CreateClientInput) => valetApi.createClient(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useClearAllVehiclesMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: valetApi.clearAllVehicles,
     onSuccess: invalidate,
   });
 }

@@ -1,14 +1,22 @@
-import { useState } from "react";
-import { Car, Grid3X3, List, Plus, Search } from "lucide-react";
+﻿import { useState } from "react";
+import { Car, Grid3X3, List, Plus, Search, Trash2 } from "lucide-react";
 import { VehicleStatusCard } from "@/components/dashboard/VehicleStatusCard";
+import { VehicleDetailsDialog } from "@/components/forms/VehicleDetailsDialog";
 import { VehicleEntryDialog } from "@/components/forms/VehicleEntryDialog";
 import { VehicleExitDialog } from "@/components/forms/VehicleExitDialog";
+import { VehicleInspectionDialog } from "@/components/forms/VehicleInspectionDialog";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCan } from "@/contexts/AuthContext";
-import { useRequestVehicleMutation, useVehiclesQuery } from "@/hooks/useValetData";
+import {
+  useAttendantsQuery,
+  useClearAllVehiclesMutation,
+  useRequestVehicleMutation,
+  useTransactionsQuery,
+  useVehiclesQuery,
+} from "@/hooks/useValetData";
 import { filterVehicles } from "@/lib/selectors";
 import { cn } from "@/lib/utils";
 import type { Vehicle, VehicleStatus } from "@/types/valet";
@@ -17,8 +25,9 @@ const statusFilters: { value: VehicleStatus | "all"; label: string }[] = [
   { value: "all", label: "Todos" },
   { value: "parked", label: "Estacionados" },
   { value: "requested", label: "Solicitados" },
-  { value: "in_transit", label: "Em Trânsito" },
+  { value: "in_transit", label: "Em Transito" },
   { value: "reserved", label: "Reservados" },
+  { value: "delivered", label: "Entregues" },
 ];
 
 export default function VehiclesPage() {
@@ -27,13 +36,19 @@ export default function VehiclesPage() {
   const [statusFilter, setStatusFilter] = useState<VehicleStatus | "all">("all");
   const [entryOpen, setEntryOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [inspectionOpen, setInspectionOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
   const canCreateVehicle = useCan("create_vehicle");
   const canRegisterExit = useCan("register_exit");
 
   const { data: vehicles = [] } = useVehiclesQuery();
+  const { data: attendants = [] } = useAttendantsQuery();
+  const { data: transactions = [] } = useTransactionsQuery();
   const requestVehicle = useRequestVehicleMutation();
+  const clearAllVehicles = useClearAllVehiclesMutation();
+
   const filteredVehicles = filterVehicles(vehicles, searchQuery, statusFilter);
 
   const statusCounts = {
@@ -42,6 +57,7 @@ export default function VehiclesPage() {
     requested: vehicles.filter((vehicle) => vehicle.status === "requested").length,
     in_transit: vehicles.filter((vehicle) => vehicle.status === "in_transit").length,
     reserved: vehicles.filter((vehicle) => vehicle.status === "reserved").length,
+    delivered: vehicles.filter((vehicle) => vehicle.status === "delivered").length,
   };
 
   return (
@@ -49,17 +65,28 @@ export default function VehiclesPage() {
       <div className="space-y-6 p-6">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Veículos</h1>
-            <p className="text-muted-foreground">Gerencie todos os veículos no estacionamento</p>
+            <h1 className="text-3xl font-bold text-foreground">Veiculos</h1>
+            <p className="text-muted-foreground">Gerencie todos os veiculos no estacionamento</p>
           </div>
-          <Button
-            className="gap-2 bg-gradient-primary hover:opacity-90"
-            onClick={() => setEntryOpen(true)}
-            disabled={!canCreateVehicle}
-          >
-            <Plus className="h-4 w-4" />
-            Nova Entrada
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+              disabled={vehicles.length === 0 || clearAllVehicles.isPending}
+              onClick={() => clearAllVehicles.mutate()}
+            >
+              <Trash2 className="h-4 w-4" />
+              Limpar carros (teste)
+            </Button>
+            <Button
+              className="gap-2 bg-gradient-primary hover:opacity-90"
+              onClick={() => setEntryOpen(true)}
+              disabled={!canCreateVehicle}
+            >
+              <Plus className="h-4 w-4" />
+              Nova Entrada
+            </Button>
+          </div>
         </div>
 
         <div className="stat-card">
@@ -135,6 +162,14 @@ export default function VehiclesPage() {
                 canRequest={canCreateVehicle}
                 canRegisterExit={canRegisterExit}
                 onRequestVehicle={(item) => requestVehicle.mutate(item.id)}
+                onViewDetails={(item) => {
+                  setSelectedVehicle(item);
+                  setDetailsOpen(true);
+                }}
+                onViewInspection={(item) => {
+                  setSelectedVehicle(item);
+                  setInspectionOpen(true);
+                }}
                 onRegisterExit={(item) => {
                   setSelectedVehicle(item);
                   setExitOpen(true);
@@ -145,7 +180,7 @@ export default function VehiclesPage() {
         ) : (
           <div className="stat-card flex flex-col items-center justify-center py-16">
             <Car className="mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="mb-1 text-lg font-semibold text-foreground">Nenhum veículo encontrado</h3>
+            <h3 className="mb-1 text-lg font-semibold text-foreground">Nenhum veiculo encontrado</h3>
             <p className="text-sm text-muted-foreground">
               Tente ajustar os filtros ou realizar uma nova busca
             </p>
@@ -158,6 +193,18 @@ export default function VehiclesPage() {
         open={exitOpen}
         onOpenChange={setExitOpen}
         initialVehicleId={selectedVehicle?.id}
+      />
+      <VehicleDetailsDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        vehicle={selectedVehicle}
+        attendants={attendants}
+        transactions={transactions}
+      />
+      <VehicleInspectionDialog
+        open={inspectionOpen}
+        onOpenChange={setInspectionOpen}
+        vehicle={selectedVehicle}
       />
     </MainLayout>
   );

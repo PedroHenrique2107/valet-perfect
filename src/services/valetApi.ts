@@ -8,16 +8,25 @@ import {
   transactionsDb,
   vehiclesDb,
 } from "@/data/mockDb";
+import {
+  DEFAULT_UNIT_NAME,
+  PARKING_DAILY_RATE,
+  PARKING_TABLE_NAME,
+  getAgreementById,
+} from "@/config/pricing";
 import type {
   Activity,
   Attendant,
   Client,
+  ContractType,
   DashboardStats,
   OccupancyData,
   ParkingSpot,
   RevenueData,
   Transaction,
   Vehicle,
+  VehicleInspection,
+  VehiclePricingSnapshot,
 } from "@/types/valet";
 
 export interface CreateVehicleInput {
@@ -27,6 +36,12 @@ export interface CreateVehicleInput {
   clientPhone?: string;
   observations?: string;
   prepaidAmount?: number;
+  prepaidAgreementId?: string;
+  prepaidPaymentMethod?: Transaction["paymentMethod"];
+  contractType?: ContractType;
+  unitName?: string;
+  createInspection?: boolean;
+  inspection?: VehicleInspection;
 }
 
 export interface RegisterExitInput {
@@ -46,6 +61,10 @@ export interface CreateClientInput {
   phone: string;
   cpf?: string;
   tier: Client["tier"];
+}
+
+export interface ClearAllVehiclesResult {
+  removedVehicles: number;
 }
 
 const LATENCY_MS = 120;
@@ -113,6 +132,45 @@ export const valetApi = {
   getDashboardStats: (): Promise<DashboardStats> => simulateNetwork(getDashboardStatsSnapshot()),
   getClients: (): Promise<Client[]> => simulateNetwork([...clientsDb]),
   getActivities: (): Promise<Activity[]> => simulateNetwork([...activitiesDb]),
+  clearAllVehicles: async (): Promise<ClearAllVehiclesResult> => {
+    const vehicleIds = new Set(vehiclesDb.map((vehicle) => vehicle.id));
+    const removedVehicles = vehiclesDb.length;
+    vehiclesDb.splice(0, vehiclesDb.length);
+
+    parkingSpotsDb.forEach((spot) => {
+      if (spot.vehicleId) {
+        delete spot.vehicleId;
+      }
+      if (spot.status === "occupied" || spot.status === "reserved") {
+        spot.status = "available";
+      }
+    });
+
+    attendantsDb.forEach((attendant) => {
+      if (attendant.currentVehicleId && vehicleIds.has(attendant.currentVehicleId)) {
+        delete attendant.currentVehicleId;
+      }
+      if (attendant.isOnline && attendant.status === "busy") {
+        attendant.status = "available";
+      }
+    });
+
+    for (let index = transactionsDb.length - 1; index >= 0; index -= 1) {
+      if (vehicleIds.has(transactionsDb[index].vehicleId)) {
+        transactionsDb.splice(index, 1);
+      }
+    }
+
+    createActivity({
+      id: createId("act"),
+      type: "alert",
+      title: "Base de Veiculos Limpa",
+      description: `${removedVehicles} veiculo(s) removido(s) para testes`,
+      time: "agora",
+    });
+
+    return simulateNetwork({ removedVehicles });
+  },
 
   createVehicle: async (input: CreateVehicleInput): Promise<Vehicle> => {
     const availableSpot = parkingSpotsDb.find((spot) => spot.status === "available");
@@ -124,6 +182,13 @@ export const valetApi = {
     if (!onlineAttendant) {
       throw new Error("Não há manobristas online no momento");
     }
+
+    const pricing: VehiclePricingSnapshot = {
+      tableName: PARKING_TABLE_NAME,
+      dailyRate: PARKING_DAILY_RATE,
+      agreementLabel: getAgreementById(input.prepaidAgreementId ?? "none").label,
+      courtesyApplied: "Sem cortesia",
+    };
 
     const newVehicle: Vehicle = {
       id: createId("v"),
@@ -139,6 +204,29 @@ export const valetApi = {
       clientName: input.clientName,
       clientPhone: input.clientPhone ?? "",
       observations: input.observations,
+      contractType: input.contractType ?? "hourly",
+      unitName: input.unitName ?? DEFAULT_UNIT_NAME,
+      spotHistory: [
+        {
+          spotId: availableSpot.code,
+          changedAt: new Date(),
+          changedBy: onlineAttendant.name,
+        },
+      ],
+      inspection: input.createInspection
+        ? (input.inspection ?? {
+            leftSide: "Sem avarias",
+            rightSide: "Sem avarias",
+            frontBumper: "Sem avarias",
+            rearBumper: "Sem avarias",
+            wheels: "Sem avarias",
+            mirrors: "Sem avarias",
+            roof: "Sem avarias",
+            windows: "Sem avarias",
+            interior: "Sem avarias",
+          })
+        : undefined,
+      pricing,
     };
 
     vehiclesDb.unshift(newVehicle);
@@ -153,7 +241,7 @@ export const valetApi = {
         id: createId("t"),
         vehicleId: newVehicle.id,
         amount: Number(input.prepaidAmount),
-        paymentMethod: "cash",
+        paymentMethod: input.prepaidPaymentMethod ?? "cash",
         status: "completed",
         createdAt: new Date(),
         completedAt: new Date(),
