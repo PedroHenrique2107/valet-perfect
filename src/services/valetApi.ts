@@ -51,6 +51,11 @@ export interface RegisterExitInput {
   amount: number;
 }
 
+export interface UpdateVehicleSpotInput {
+  vehicleId: string;
+  spotId: string;
+}
+
 export interface AssignTaskInput {
   attendantId: string;
   vehicleId: string;
@@ -105,7 +110,7 @@ function getDashboardStatsSnapshot(): DashboardStats {
   const avgWaitTime =
     waitingVehicles.length > 0
       ? Math.round(
-          (waitingVehicles.reduce((acc, vehicle) => acc + (Date.now() - vehicle.entryTime.getTime()) / 60000, 0) /
+          (waitingVehicles.reduce((acc, vehicle) => acc + (Date.now() - (vehicle.requestedAt ?? vehicle.entryTime).getTime()) / 60000, 0) /
             waitingVehicles.length) *
             10,
         ) / 10
@@ -230,6 +235,7 @@ export const valetApi = {
         : undefined,
       pricing,
       hasSemParar: input.hasSemParar ?? false,
+      prepaidPaid: (input.prepaidAmount ?? 0) > 0,
     };
 
     vehiclesDb.unshift(newVehicle);
@@ -272,12 +278,66 @@ export const valetApi = {
     }
 
     vehicle.status = "requested";
+    vehicle.requestedAt = new Date();
 
     createActivity({
       id: createId("act"),
       type: "request",
       title: "Veículo Solicitado",
       description: `${vehicle.clientName} solicitou o veículo ${vehicle.plate}`,
+      time: "agora",
+      plate: vehicle.plate,
+    });
+
+    return simulateNetwork(vehicle);
+  },
+
+  updateVehicleSpot: async (input: UpdateVehicleSpotInput): Promise<Vehicle> => {
+    const vehicle = vehiclesDb.find((item) => item.id === input.vehicleId);
+    if (!vehicle) {
+      throw new Error("VeÃ­culo nÃ£o encontrado");
+    }
+    if (vehicle.status === "delivered") {
+      throw new Error("NÃ£o Ã© possÃ­vel trocar vaga de veÃ­culo entregue");
+    }
+    if (vehicle.spotId === input.spotId) {
+      return simulateNetwork(vehicle);
+    }
+
+    const targetSpot = parkingSpotsDb.find((spot) => spot.code === input.spotId);
+    if (!targetSpot) {
+      throw new Error("Vaga nÃ£o encontrada");
+    }
+    if (targetSpot.status !== "available") {
+      throw new Error("A vaga selecionada nÃ£o estÃ¡ disponÃ­vel");
+    }
+
+    const previousSpot = parkingSpotsDb.find((spot) => spot.code === vehicle.spotId);
+    if (previousSpot && previousSpot.vehicleId === vehicle.id) {
+      previousSpot.status = "available";
+      delete previousSpot.vehicleId;
+    }
+
+    targetSpot.status = "occupied";
+    targetSpot.vehicleId = vehicle.id;
+    vehicle.spotId = targetSpot.code;
+
+    const changedBy =
+      attendantsDb.find((attendant) => attendant.id === vehicle.attendantId)?.name ?? "Sistema";
+    vehicle.spotHistory = [
+      ...(vehicle.spotHistory ?? []),
+      {
+        spotId: targetSpot.code,
+        changedAt: new Date(),
+        changedBy,
+      },
+    ];
+
+    createActivity({
+      id: createId("act"),
+      type: "entry",
+      title: "Troca de Vaga",
+      description: `${vehicle.plate} movido para vaga ${targetSpot.code}`,
       time: "agora",
       plate: vehicle.plate,
     });

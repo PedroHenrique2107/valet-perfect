@@ -18,6 +18,7 @@ export interface Vehicle {
   year: number;
   status: VehicleStatus;
   entryTime: Date;
+  requestedAt?: Date;
   exitTime?: Date;
   spotId: string;
   attendantId: string;
@@ -33,6 +34,7 @@ export interface Vehicle {
   inspection?: VehicleInspection;
   pricing?: VehiclePricingSnapshot;
   hasSemParar?: boolean;
+  prepaidPaid?: boolean;
 }
 
 export interface SpotHistoryEntry {

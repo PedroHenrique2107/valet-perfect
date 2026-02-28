@@ -6,7 +6,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DEFAULT_UNIT_NAME } from "@/config/pricing";
+import { useParkingSpotsQuery, useUpdateVehicleSpotMutation } from "@/hooks/useValetData";
 import { formatCurrencyBRL, formatDateTimeBR, formatDurationPrecise } from "@/lib/format";
 import type { Attendant, Transaction, Vehicle } from "@/types/valet";
 
@@ -50,12 +59,20 @@ export function VehicleDetailsDialog({
   transactions,
 }: VehicleDetailsDialogProps) {
   const [now, setNow] = useState(Date.now());
+  const [selectedSpot, setSelectedSpot] = useState("");
+  const { data: parkingSpots = [] } = useParkingSpotsQuery();
+  const updateVehicleSpot = useUpdateVehicleSpotMutation();
 
   useEffect(() => {
     if (!open || !vehicle || vehicle.status === "delivered") return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
     return () => window.clearInterval(timer);
   }, [open, vehicle]);
+
+  useEffect(() => {
+    if (!vehicle) return;
+    setSelectedSpot(vehicle.spotId);
+  }, [vehicle]);
 
   const attendantName = useMemo(() => {
     if (!vehicle) return "-";
@@ -71,9 +88,16 @@ export function VehicleDetailsDialog({
 
   if (!vehicle) return null;
 
+  const startTime =
+    vehicle.status === "requested" || vehicle.status === "in_transit"
+      ? vehicle.requestedAt ?? vehicle.entryTime
+      : vehicle.entryTime;
   const finalTime = vehicle.exitTime?.getTime() ?? now;
-  const totalSeconds = Math.max(0, Math.floor((finalTime - vehicle.entryTime.getTime()) / 1000));
+  const totalSeconds = Math.max(0, Math.floor((finalTime - startTime.getTime()) / 1000));
   const latestTx = vehicleTx[0];
+  const selectableSpots = parkingSpots
+    .filter((spot) => spot.status === "available" || spot.code === vehicle.spotId)
+    .sort((a, b) => a.code.localeCompare(b.code));
 
   const inspectionOkList = vehicle.inspection
     ? [
@@ -112,7 +136,34 @@ export function VehicleDetailsDialog({
           <Field label="Status atual" value={statusLabel[vehicle.status]} />
           <Field label="Tempo total no patio (live)" value={formatDurationPrecise(totalSeconds)} />
           <Field label="SemParar" value={vehicle.hasSemParar ? "Cadastrado" : "Nao cadastrado"} />
+          <Field label="Pagamento antecipado" value={vehicle.prepaidPaid ? "Sim" : "Nao"} />
         </div>
+
+        <section className="space-y-2">
+          <h4 className="font-semibold">Editar vaga atual</h4>
+          <div className="grid grid-cols-1 gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_auto]">
+            <Select value={selectedSpot} onValueChange={setSelectedSpot} disabled={vehicle.status === "delivered"}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a vaga" />
+              </SelectTrigger>
+              <SelectContent>
+                {selectableSpots.map((spot) => (
+                  <SelectItem key={spot.id} value={spot.code}>
+                    {spot.code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={vehicle.status === "delivered" || selectedSpot === vehicle.spotId || updateVehicleSpot.isPending}
+              onClick={() => updateVehicleSpot.mutate({ vehicleId: vehicle.id, spotId: selectedSpot })}
+            >
+              {updateVehicleSpot.isPending ? "Salvando..." : "Salvar vaga"}
+            </Button>
+          </div>
+        </section>
 
         <section className="space-y-2">
           <h4 className="font-semibold">Historico de troca de vaga</h4>

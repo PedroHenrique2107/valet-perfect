@@ -168,7 +168,7 @@ export function Sidebar() {
           )}
         >
           <Avatar className="h-9 w-9 flex-shrink-0">
-            <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=Pedro" />
+            <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=Pedro Henrique" />
             <AvatarFallback>AD</AvatarFallback>
           </Avatar>
           {!collapsed && (

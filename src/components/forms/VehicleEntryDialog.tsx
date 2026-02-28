@@ -89,12 +89,12 @@ const schema = z
     }
 
     if (data.createInspection) {
-      const pending = inspectionKeys.filter((key) => !data[key]);
-      if (pending.length > 0) {
+      const selectedCount = inspectionKeys.filter((key) => data[key]).length;
+      if (selectedCount === 0) {
         ctx.addIssue({
           code: "custom",
-          path: [pending[0]],
-          message: "Preencha todos os itens da vistoria.",
+          path: [inspectionKeys[0]],
+          message: "Selecione ao menos 1 item da vistoria.",
         });
       }
     }
@@ -352,7 +352,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
             </div>
 
             {Object.values(form.formState.errors).length > 0 && (
-              <p className="text-sm text-destructive">Campos obrigatorios: placa, modelo, cliente e checklist completo.</p>
+              <p className="text-sm text-destructive">Campos obrigatorios: placa, modelo, cliente e ao menos 1 item da vistoria (quando ativa).</p>
             )}
 
             <DialogFooter>

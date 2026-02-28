@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Car, Grid3X3, List, Plus, Search, Trash2 } from "lucide-react";
 import { COMPANY_NAME, DEFAULT_UNIT_NAME } from "@/config/pricing";
 import { VehicleStatusCard } from "@/components/dashboard/VehicleStatusCard";
@@ -22,18 +22,18 @@ import { filterVehicles } from "@/lib/selectors";
 import { cn } from "@/lib/utils";
 import type { Vehicle, VehicleStatus } from "@/types/valet";
 
-const statusFilters: { value: VehicleStatus | "all"; label: string }[] = [
+const statusFilters: { value: VehicleStatus | "all" | "agreement"; label: string }[] = [
   { value: "all", label: "Todos" },
   { value: "parked", label: "Estacionados" },
   { value: "requested", label: "Solicitados" },
-  { value: "reserved", label: "Reservados" },
+  { value: "agreement", label: "Credenciados" },
   { value: "delivered", label: "Entregues" },
 ];
 
 export default function VehiclesPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<VehicleStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<VehicleStatus | "all" | "agreement">("all");
   const [entryOpen, setEntryOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -51,11 +51,19 @@ export default function VehiclesPage() {
 
   const filteredVehicles = filterVehicles(vehicles, searchQuery, statusFilter);
 
+  useEffect(() => {
+    if (!selectedVehicle) return;
+    const refreshed = vehicles.find((vehicle) => vehicle.id === selectedVehicle.id);
+    if (refreshed && refreshed !== selectedVehicle) {
+      setSelectedVehicle(refreshed);
+    }
+  }, [vehicles, selectedVehicle]);
+
   const statusCounts = {
     all: vehicles.length,
     parked: vehicles.filter((vehicle) => vehicle.status === "parked").length,
     requested: vehicles.filter((vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit").length,
-    reserved: vehicles.filter((vehicle) => vehicle.status === "reserved").length,
+    agreement: vehicles.filter((vehicle) => vehicle.contractType === "agreement").length,
     delivered: vehicles.filter((vehicle) => vehicle.status === "delivered").length,
   };
 
@@ -210,3 +218,4 @@ export default function VehiclesPage() {
     </MainLayout>
   );
 }
+

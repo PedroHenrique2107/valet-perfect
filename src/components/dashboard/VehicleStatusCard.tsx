@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { Car, Clock, MapPin, MoreVertical, Phone, Send, User } from "lucide-react";
+import { Car, CircleDollarSign, Clock, MapPin, MoreVertical, Phone, Send, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,11 +25,11 @@ interface VehicleStatusCardProps {
 }
 
 const statusConfig = {
-  parked: { label: "Estacionado", className: "bg-blue-100 text-blue-700 border-blue-300", dotColor: "bg-blue-500" },
-  requested: { label: "Solicitado", className: "bg-amber-100 text-amber-700 border-amber-300", dotColor: "bg-amber-500" },
-  in_transit: { label: "Solicitado", className: "bg-amber-100 text-amber-700 border-amber-300", dotColor: "bg-amber-500" },
-  delivered: { label: "Entregue", className: "bg-emerald-100 text-emerald-700 border-emerald-300", dotColor: "bg-emerald-500" },
-  reserved: { label: "Reservado", className: "bg-pink-100 text-pink-700 border-pink-300", dotColor: "bg-pink-500" },
+  parked: { label: "Estacionado", className: "bg-success/20 text-success border-success/40", dotColor: "bg-success" },
+  requested: { label: "Solicitado", className: "bg-warning/20 text-warning border-warning/40", dotColor: "bg-warning" },
+  in_transit: { label: "Solicitado", className: "bg-warning/20 text-warning border-warning/40", dotColor: "bg-warning" },
+  delivered: { label: "Entregue", className: "bg-info/20 text-info border-info/40", dotColor: "bg-info" },
+  reserved: { label: "Reservado", className: "bg-muted text-muted-foreground border-border", dotColor: "bg-muted-foreground" },
 };
 
 const contractLabel: Record<string, string> = {
@@ -57,14 +57,18 @@ export function VehicleStatusCard({
     if (vehicle.status === "delivered") {
       return;
     }
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
     return () => window.clearInterval(timer);
   }, [vehicle.status]);
 
   const totalSeconds = useMemo(() => {
+    const startTime =
+      vehicle.status === "requested" || vehicle.status === "in_transit"
+        ? vehicle.requestedAt ?? vehicle.entryTime
+        : vehicle.entryTime;
     const end = vehicle.exitTime?.getTime() ?? now;
-    return Math.max(0, Math.floor((end - vehicle.entryTime.getTime()) / 1000));
-  }, [now, vehicle.entryTime, vehicle.exitTime]);
+    return Math.max(0, Math.floor((end - startTime.getTime()) / 1000));
+  }, [now, vehicle.entryTime, vehicle.exitTime, vehicle.requestedAt, vehicle.status]);
 
   return (
     <div
@@ -85,6 +89,12 @@ export function VehicleStatusCard({
               <span className={cn("text-xs", vehicle.contractType === "monthly" && "line-through")}>{contractLabel[vehicle.contractType ?? "hourly"]}</span>
               {vehicle.hasSemParar ? (
                 <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">SemParar</span>
+              ) : null}
+              {vehicle.prepaidPaid ? (
+                <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  <CircleDollarSign className="h-3 w-3" />
+                  Pago antecipado
+                </span>
               ) : null}
             </div>
           </div>

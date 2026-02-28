@@ -3,7 +3,7 @@ import type { Attendant, Vehicle, VehicleStatus } from "@/types/valet";
 export function filterVehicles(
   vehicles: Vehicle[],
   searchQuery: string,
-  statusFilter: VehicleStatus | "all",
+  statusFilter: VehicleStatus | "all" | "agreement",
 ): Vehicle[] {
   const normalized = searchQuery.trim().toLowerCase();
 
@@ -16,6 +16,7 @@ export function filterVehicles(
       vehicle.model.toLowerCase().includes(normalized);
     const matchesStatus =
       statusFilter === "all" ||
+      (statusFilter === "agreement" && vehicle.contractType === "agreement") ||
       vehicle.status === statusFilter ||
       (statusFilter === "requested" && vehicle.status === "in_transit");
     return matchesSearch && matchesStatus;

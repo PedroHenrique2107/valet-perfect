@@ -42,6 +42,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
   const [now, setNow] = useState(Date.now());
 
   const activeVehicles = vehicles.filter((vehicle) => vehicle.status !== "delivered");
+  const isLockedVehicle = Boolean(initialVehicleId);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -79,7 +80,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
       paymentMethod: values.paymentMethod,
       amount: pricing.net,
     });
-    form.reset({ vehicleId: "", paymentMethod: "pix", agreementId: "none" });
+    form.reset({ vehicleId: initialVehicleId ?? "", paymentMethod: "pix", agreementId: "none" });
     onOpenChange(false);
   });
 
@@ -92,21 +93,23 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
         </DialogHeader>
 
         <form className="space-y-3" onSubmit={onSubmit}>
-          <Select
-            value={form.watch("vehicleId")}
-            onValueChange={(value) => form.setValue("vehicleId", value, { shouldValidate: true })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione o veiculo" />
-            </SelectTrigger>
-            <SelectContent>
-              {activeVehicles.map((vehicle) => (
-                <SelectItem key={vehicle.id} value={vehicle.id}>
-                  {vehicle.plate} - {vehicle.clientName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!isLockedVehicle && (
+            <Select
+              value={form.watch("vehicleId")}
+              onValueChange={(value) => form.setValue("vehicleId", value, { shouldValidate: true })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o veiculo" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeVehicles.map((vehicle) => (
+                  <SelectItem key={vehicle.id} value={vehicle.id}>
+                    {vehicle.plate} - {vehicle.clientName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           {selectedVehicle && (
             <div className="rounded-md border p-3 text-sm">

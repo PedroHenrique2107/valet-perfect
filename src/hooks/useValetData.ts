@@ -5,6 +5,7 @@ import {
   type CreateClientInput,
   type CreateVehicleInput,
   type RegisterExitInput,
+  type UpdateVehicleSpotInput,
 } from "@/services/valetApi";
 
 const STALE_TIME = 60_000;
@@ -151,6 +152,14 @@ export function useClearAllVehiclesMutation() {
   const invalidate = useInvalidateCoreQueries();
   return useMutation({
     mutationFn: valetApi.clearAllVehicles,
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateVehicleSpotMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: UpdateVehicleSpotInput) => valetApi.updateVehicleSpot(input),
     onSuccess: invalidate,
   });
 }
