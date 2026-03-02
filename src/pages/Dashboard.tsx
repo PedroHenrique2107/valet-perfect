@@ -17,7 +17,6 @@ import { QuickActions } from "@/components/dashboard/QuickActions";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { VehicleStatusCard } from "@/components/dashboard/VehicleStatusCard";
-import { AssignTaskDialog } from "@/components/forms/AssignTaskDialog";
 import { ClientCreateDialog } from "@/components/forms/ClientCreateDialog";
 import { VehicleEntryDialog } from "@/components/forms/VehicleEntryDialog";
 import { VehicleExitDialog } from "@/components/forms/VehicleExitDialog";
@@ -33,7 +32,7 @@ import {
 } from "@/hooks/useValetData";
 import { useCan } from "@/contexts/AuthContext";
 import { formatCurrencyBRL, formatDurationMinutes, formatTimeBR } from "@/lib/format";
-import type { Attendant, Vehicle } from "@/types/valet";
+import type { Vehicle } from "@/types/valet";
 
 export default function Dashboard() {
   const { data: stats } = useDashboardStatsQuery();
@@ -47,15 +46,12 @@ export default function Dashboard() {
 
   const canCreateVehicle = useCan("create_vehicle");
   const canRegisterExit = useCan("register_exit");
-  const canAssignTask = useCan("assign_task");
   const canCreateClient = useCan("create_client");
 
   const [entryOpen, setEntryOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
   const [clientOpen, setClientOpen] = useState(false);
-  const [assignOpen, setAssignOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
-  const [selectedAttendant, setSelectedAttendant] = useState<Attendant | null>(null);
 
   const requestedVehicles = vehicles.filter(
     (vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit",
@@ -199,15 +195,7 @@ export default function Dashboard() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {activeAttendants.slice(0, 4).map((attendant) => (
-              <AttendantCard
-                key={attendant.id}
-                attendant={attendant}
-                canAssignTask={canAssignTask}
-                onAssignTask={(item) => {
-                  setSelectedAttendant(item);
-                  setAssignOpen(true);
-                }}
-              />
+              <AttendantCard key={attendant.id} attendant={attendant} />
             ))}
           </div>
         </div>
@@ -220,11 +208,6 @@ export default function Dashboard() {
         initialVehicleId={selectedVehicle?.id}
       />
       <ClientCreateDialog open={clientOpen} onOpenChange={setClientOpen} />
-      <AssignTaskDialog
-        open={assignOpen}
-        onOpenChange={setAssignOpen}
-        initialAttendantId={selectedAttendant?.id}
-      />
     </div>
   );
 }

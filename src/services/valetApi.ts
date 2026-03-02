@@ -9,6 +9,10 @@
   vehiclesDb,
 } from "@/data/mockDb";
 import {
+  getParkingById,
+  PARKING_OPTIONS,
+} from "@/config/parkings";
+import {
   DEFAULT_UNIT_NAME,
   PARKING_DAILY_RATE,
   PARKING_TABLE_NAME,
@@ -69,8 +73,21 @@ export interface CreateClientInput {
   tier: Client["tier"];
 }
 
+export interface CreateAttendantInput {
+  name: string;
+  phone: string;
+  parkingId: string;
+  workPeriodStart: string;
+  workPeriodEnd: string;
+  maxWorkHours: number;
+}
+
 export interface ClearAllVehiclesResult {
   removedVehicles: number;
+}
+
+export interface ClearAllAttendantsResult {
+  removedAttendants: number;
 }
 
 const LATENCY_MS = 120;
@@ -138,6 +155,20 @@ export const valetApi = {
   getDashboardStats: (): Promise<DashboardStats> => simulateNetwork(getDashboardStatsSnapshot()),
   getClients: (): Promise<Client[]> => simulateNetwork([...clientsDb]),
   getActivities: (): Promise<Activity[]> => simulateNetwork([...activitiesDb]),
+  clearAllAttendants: async (): Promise<ClearAllAttendantsResult> => {
+    const removedAttendants = attendantsDb.length;
+    attendantsDb.splice(0, attendantsDb.length);
+
+    createActivity({
+      id: createId("act"),
+      type: "alert",
+      title: "Base de Manobristas Limpa",
+      description: `${removedAttendants} manobrista(s) removido(s) para testes`,
+      time: "agora",
+    });
+
+    return simulateNetwork({ removedAttendants });
+  },
   clearAllVehicles: async (): Promise<ClearAllVehiclesResult> => {
     const vehicleIds = new Set(vehiclesDb.map((vehicle) => vehicle.id));
     const removedVehicles = vehiclesDb.length;
@@ -156,8 +187,8 @@ export const valetApi = {
       if (attendant.currentVehicleId && vehicleIds.has(attendant.currentVehicleId)) {
         delete attendant.currentVehicleId;
       }
-      if (attendant.isOnline && attendant.status === "busy") {
-        attendant.status = "available";
+      if (attendant.isOnline) {
+        attendant.status = "online";
       }
     });
 
@@ -195,7 +226,9 @@ export const valetApi = {
       throw new Error("A vaga selecionada nao esta disponivel");
     }
 
-    const onlineAttendant = attendantsDb.find((attendant) => attendant.isOnline);
+    const onlineAttendant = attendantsDb.find(
+      (attendant) => attendant.isOnline && attendant.status === "online",
+    );
     if (!onlineAttendant) {
       throw new Error("NÃ£o hÃ¡ manobristas online no momento");
     }
@@ -375,6 +408,13 @@ export const valetApi = {
       1,
       Math.round((vehicle.exitTime.getTime() - vehicle.entryTime.getTime()) / 60000),
     );
+    const attendant = attendantsDb.find((item) => item.id === vehicle.attendantId);
+    if (attendant) {
+      attendant.vehiclesHandled += 1;
+      attendant.vehiclesHandledToday += 1;
+      attendant.status = attendant.isOnline ? "online" : "offline";
+      delete attendant.currentVehicleId;
+    }
 
     transactionsDb.unshift({
       id: createId("t"),
@@ -411,7 +451,7 @@ export const valetApi = {
       throw new Error("VeÃ­culo nÃ£o encontrado");
     }
 
-    attendant.status = "busy";
+    attendant.status = "commuting";
     attendant.currentVehicleId = vehicle.id;
     vehicle.status = "in_transit";
     vehicle.attendantId = attendant.id;
@@ -454,6 +494,56 @@ export const valetApi = {
     });
 
     return simulateNetwork(client);
+  },
+
+  createAttendant: async (input: CreateAttendantInput): Promise<Attendant> => {
+    const normalizedPhone = input.phone.trim();
+    const normalizedName = input.name.trim();
+    if (!normalizedName) {
+      throw new Error("Nome do manobrista e obrigatorio");
+    }
+    if (!normalizedPhone) {
+      throw new Error("Telefone do manobrista e obrigatorio");
+    }
+    const parking = getParkingById(PARKING_OPTIONS[0].id);
+    const shift: Attendant["shift"] =
+      input.workPeriodStart < "12:00"
+        ? "morning"
+        : input.workPeriodStart < "18:00"
+          ? "afternoon"
+          : "night";
+
+    const newAttendant: Attendant = {
+      id: createId("a"),
+      name: normalizedName,
+      phone: normalizedPhone,
+      photo: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(normalizedName)}`,
+      status: "offline",
+      vehiclesHandled: 0,
+      vehiclesHandledToday: 0,
+      avgServiceTime: 0,
+      rating: 5,
+      shift,
+      isOnline: false,
+      parkingId: parking.id,
+      parkingName: parking.name,
+      workPeriodStart: input.workPeriodStart,
+      workPeriodEnd: input.workPeriodEnd,
+      maxWorkHours: input.maxWorkHours,
+      accumulatedWorkMinutes: 0,
+    };
+
+    attendantsDb.unshift(newAttendant);
+
+    createActivity({
+      id: createId("act"),
+      type: "entry",
+      title: "Novo Manobrista",
+      description: `${newAttendant.name} cadastrado para ${parking.name}`,
+      time: "agora",
+    });
+
+    return simulateNetwork(newAttendant);
   },
 };
 

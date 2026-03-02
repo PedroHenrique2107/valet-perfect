@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   valetApi,
   type AssignTaskInput,
+  type CreateAttendantInput,
   type CreateClientInput,
   type CreateVehicleInput,
   type RegisterExitInput,
@@ -148,10 +149,26 @@ export function useCreateClientMutation() {
   });
 }
 
+export function useCreateAttendantMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: CreateAttendantInput) => valetApi.createAttendant(input),
+    onSuccess: invalidate,
+  });
+}
+
 export function useClearAllVehiclesMutation() {
   const invalidate = useInvalidateCoreQueries();
   return useMutation({
     mutationFn: valetApi.clearAllVehicles,
+    onSuccess: invalidate,
+  });
+}
+
+export function useClearAllAttendantsMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: valetApi.clearAllAttendants,
     onSuccess: invalidate,
   });
 }

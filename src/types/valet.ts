@@ -3,7 +3,7 @@
 export type VehicleStatus = 'parked' | 'requested' | 'in_transit' | 'delivered' | 'reserved';
 export type ContractType = "hourly" | "daily" | "monthly" | "agreement";
 
-export type AttendantStatus = 'available' | 'busy' | 'break' | 'offline';
+export type AttendantStatus = "online" | "offline" | "lunch" | "dinner" | "commuting";
 
 export type PaymentMethod = 'pix' | 'credit' | 'debit' | 'cash' | 'monthly';
 
@@ -69,11 +69,19 @@ export interface Attendant {
   status: AttendantStatus;
   phone: string;
   vehiclesHandled: number;
+  vehiclesHandledToday: number;
   avgServiceTime: number; // in seconds
   rating: number;
   currentVehicleId?: string;
   shift: 'morning' | 'afternoon' | 'night';
   isOnline: boolean;
+  parkingId: string;
+  parkingName: string;
+  workPeriodStart: string;
+  workPeriodEnd: string;
+  maxWorkHours: number;
+  startedAt?: Date;
+  accumulatedWorkMinutes: number;
 }
 
 export interface ParkingSpot {
