@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateVehicleMutation } from "@/hooks/useValetData";
+import { useCreateVehicleMutation, useParkingSpotsQuery } from "@/hooks/useValetData";
 import { formatCurrencyBRL } from "@/lib/format";
 import type { ContractType } from "@/types/valet";
 
@@ -59,6 +59,7 @@ const schema = z
   .object({
     isMercosul: z.boolean(),
     plate: z.string(),
+    spotId: z.string().min(1, "Selecione a vaga"),
     model: z.string().min(1, "Modelo obrigatorio"),
     clientName: z.string().min(2, "Nome do cliente obrigatorio"),
     clientPhone: z.string().optional(),
@@ -66,7 +67,6 @@ const schema = z
     contractType: z.enum(["hourly", "daily", "monthly", "agreement"]),
     createInspection: z.boolean(),
     prepaidEnabled: z.boolean(),
-    hasSemParar: z.boolean(),
     leftSide: z.boolean(),
     rightSide: z.boolean(),
     frontBumper: z.boolean(),
@@ -84,7 +84,7 @@ const schema = z
       ctx.addIssue({
         code: "custom",
         path: ["plate"],
-        message: data.isMercosul ? "Placa Mercosul invalida (ex: ABC1D23)" : "Placa invalida (ex: FRD-4486)",
+        message: data.isMercosul ? "Placa Mercosul invalida (ex: ABC1D23)" : "Placa invalida (ex: ABC-1234)",
       });
     }
 
@@ -152,14 +152,17 @@ function formatPhone(value: string): string {
 
 export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogProps) {
   const createVehicle = useCreateVehicleMutation();
+  const { data: parkingSpots = [] } = useParkingSpotsQuery();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [prepaidSelection, setPrepaidSelection] = useState<PrepaidChargeSelection | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       isMercosul: false,
       plate: "",
+      spotId: "",
       model: "",
       clientName: "",
       clientPhone: "",
@@ -167,7 +170,6 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
       contractType: "hourly",
       createInspection: false,
       prepaidEnabled: false,
-      hasSemParar: false,
       leftSide: false,
       rightSide: false,
       frontBumper: false,
@@ -185,40 +187,51 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
   const phone = form.watch("clientPhone") ?? "";
   const prepaidEnabled = form.watch("prepaidEnabled");
   const createInspection = form.watch("createInspection");
+  const availableSpots = parkingSpots.filter((spot) => spot.status === "available");
 
   const onSubmit = form.handleSubmit(async (values) => {
-    await createVehicle.mutateAsync({
-      plate: values.plate,
-      model: values.model,
-      clientName: values.clientName,
-      clientPhone: values.clientPhone,
-      observations: values.observations,
-      contractType: values.contractType as ContractType,
-      unitName: DEFAULT_UNIT_NAME,
-      hasSemParar: values.hasSemParar,
-      createInspection: values.createInspection,
-      inspection: values.createInspection
-        ? {
-            leftSide: values.leftSide,
-            rightSide: values.rightSide,
-            frontBumper: values.frontBumper,
-            rearBumper: values.rearBumper,
-            wheels: values.wheels,
-            mirrors: values.mirrors,
-            roof: values.roof,
-            windows: values.windows,
-            interior: values.interior,
-            completedAt: new Date(),
-          }
-        : undefined,
-      prepaidAmount: values.prepaidEnabled ? prepaidSelection?.amount : 0,
-      prepaidAgreementId: values.prepaidEnabled ? prepaidSelection?.agreementId : "none",
-      prepaidPaymentMethod: values.prepaidEnabled ? prepaidSelection?.paymentMethod : undefined,
-    });
+    setSubmitError(null);
+    try {
+      await createVehicle.mutateAsync({
+        plate: values.plate,
+        spotId: values.spotId,
+        model: values.model,
+        clientName: values.clientName,
+        clientPhone: values.clientPhone,
+        observations: values.observations,
+        contractType: values.contractType as ContractType,
+        unitName: DEFAULT_UNIT_NAME,
+        createInspection: values.createInspection,
+        inspection: values.createInspection
+          ? {
+              leftSide: values.leftSide,
+              rightSide: values.rightSide,
+              frontBumper: values.frontBumper,
+              rearBumper: values.rearBumper,
+              wheels: values.wheels,
+              mirrors: values.mirrors,
+              roof: values.roof,
+              windows: values.windows,
+              interior: values.interior,
+              completedAt: new Date(),
+            }
+          : undefined,
+        prepaidAmount: values.prepaidEnabled ? prepaidSelection?.amount : 0,
+        prepaidAgreementId: values.prepaidEnabled ? prepaidSelection?.agreementId : "none",
+        prepaidPaymentMethod: values.prepaidEnabled ? prepaidSelection?.paymentMethod : undefined,
+      });
 
-    form.reset();
-    setPrepaidSelection(null);
-    onOpenChange(false);
+      form.reset();
+      setPrepaidSelection(null);
+      onOpenChange(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Nao foi possivel registrar o veiculo.";
+      if (message.toLowerCase().includes("placa")) {
+        setSubmitError("Esta placa ja esta no sistema.");
+        return;
+      }
+      setSubmitError(message);
+    }
   });
 
   return (
@@ -236,7 +249,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                 <Label htmlFor="plate">Placa *</Label>
                 <Input
                   id="plate"
-                  placeholder={isMercosul ? "ABC1D23" : "FRD-4486"}
+                  placeholder={isMercosul ? "ABC1D23" : "ABC-1234"}
                   value={plate}
                   onChange={(event) => {
                     const formatted = isMercosul ? formatMercosulPlate(event.target.value) : formatStandardPlate(event.target.value);
@@ -248,6 +261,25 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
               <div className="space-y-2">
                 <Label htmlFor="model">Modelo *</Label>
                 <Input id="model" placeholder="Modelo" {...form.register("model")} />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Vaga *</Label>
+                <Select
+                  value={form.watch("spotId")}
+                  onValueChange={(value) => form.setValue("spotId", value, { shouldValidate: true })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a vaga" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSpots.map((spot) => (
+                      <SelectItem key={spot.id} value={spot.code}>
+                        {spot.code} - Piso {spot.floor}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -278,11 +310,6 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                   }}
                 />
                 <Label htmlFor="isMercosul">Placa Mercosul</Label>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Checkbox id="hasSemParar" checked={form.watch("hasSemParar")} onCheckedChange={(checked) => form.setValue("hasSemParar", Boolean(checked))} />
-                <Label htmlFor="hasSemParar">Placa com SemParar</Label>
               </div>
             </div>
 
@@ -354,6 +381,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
             {Object.values(form.formState.errors).length > 0 && (
               <p className="text-sm text-destructive">Campos obrigatorios: placa, modelo, cliente e ao menos 1 item da vistoria (quando ativa).</p>
             )}
+            {submitError && <p className="text-sm text-destructive">{submitError}</p>}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

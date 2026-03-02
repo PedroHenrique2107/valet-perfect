@@ -40,7 +40,6 @@ const paymentLabel: Record<string, string> = {
   debit: "Debito",
   cash: "Dinheiro",
   monthly: "Mensalista",
-  semparar: "SemParar",
 };
 
 const statusLabel: Record<string, string> = {
@@ -135,7 +134,6 @@ export function VehicleDetailsDialog({
           <Field label="Data/hora de entrada" value={formatDateTimeBR(vehicle.entryTime)} />
           <Field label="Status atual" value={statusLabel[vehicle.status]} />
           <Field label="Tempo total no patio (live)" value={formatDurationPrecise(totalSeconds)} />
-          <Field label="SemParar" value={vehicle.hasSemParar ? "Cadastrado" : "Nao cadastrado"} />
           <Field label="Pagamento antecipado" value={vehicle.prepaidPaid ? "Sim" : "Nao"} />
         </div>
 

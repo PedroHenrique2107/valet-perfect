@@ -24,7 +24,7 @@ import { formatCurrencyBRL, formatDurationPrecise } from "@/lib/format";
 
 const schema = z.object({
   vehicleId: z.string().min(1, "Selecione um veiculo"),
-  paymentMethod: z.enum(["pix", "credit", "debit", "cash", "monthly", "semparar"]),
+  paymentMethod: z.enum(["pix", "credit", "debit", "cash", "monthly"]),
   agreementId: z.string().min(1),
 });
 
@@ -148,7 +148,6 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
               <SelectItem value="credit">Credito</SelectItem>
               <SelectItem value="debit">Debito</SelectItem>
               <SelectItem value="cash">Dinheiro</SelectItem>
-              <SelectItem value="semparar">SemParar</SelectItem>
               <SelectItem value="monthly" disabled className="line-through">Mensalista (em breve)</SelectItem>
             </SelectContent>
           </Select>

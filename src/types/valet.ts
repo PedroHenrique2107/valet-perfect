@@ -5,7 +5,7 @@ export type ContractType = "hourly" | "daily" | "monthly" | "agreement";
 
 export type AttendantStatus = 'available' | 'busy' | 'break' | 'offline';
 
-export type PaymentMethod = 'pix' | 'credit' | 'debit' | 'cash' | 'monthly' | 'semparar';
+export type PaymentMethod = 'pix' | 'credit' | 'debit' | 'cash' | 'monthly';
 
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 
@@ -33,7 +33,6 @@ export interface Vehicle {
   spotHistory?: SpotHistoryEntry[];
   inspection?: VehicleInspection;
   pricing?: VehiclePricingSnapshot;
-  hasSemParar?: boolean;
   prepaidPaid?: boolean;
 }
 

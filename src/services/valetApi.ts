@@ -1,4 +1,4 @@
-import {
+﻿import {
   activitiesDb,
   attendantsDb,
   clientsDb,
@@ -31,6 +31,7 @@ import type {
 
 export interface CreateVehicleInput {
   plate: string;
+  spotId: string;
   model: string;
   clientName: string;
   clientPhone?: string;
@@ -42,7 +43,6 @@ export interface CreateVehicleInput {
   unitName?: string;
   createInspection?: boolean;
   inspection?: VehicleInspection;
-  hasSemParar?: boolean;
 }
 
 export interface RegisterExitInput {
@@ -179,14 +179,25 @@ export const valetApi = {
   },
 
   createVehicle: async (input: CreateVehicleInput): Promise<Vehicle> => {
-    const availableSpot = parkingSpotsDb.find((spot) => spot.status === "available");
-    if (!availableSpot) {
-      throw new Error("Não há vagas disponíveis no momento");
+    const normalizedPlate = input.plate.toUpperCase();
+    const existingActiveVehicle = vehiclesDb.find(
+      (vehicle) => vehicle.status !== "delivered" && vehicle.plate.toUpperCase() === normalizedPlate,
+    );
+    if (existingActiveVehicle) {
+      throw new Error("Ja existe um veiculo ativo com esta placa");
+    }
+
+    const selectedSpot = parkingSpotsDb.find((spot) => spot.code === input.spotId);
+    if (!selectedSpot) {
+      throw new Error("Vaga nao encontrada");
+    }
+    if (selectedSpot.status !== "available") {
+      throw new Error("A vaga selecionada nao esta disponivel");
     }
 
     const onlineAttendant = attendantsDb.find((attendant) => attendant.isOnline);
     if (!onlineAttendant) {
-      throw new Error("Não há manobristas online no momento");
+      throw new Error("NÃ£o hÃ¡ manobristas online no momento");
     }
 
     const pricing: VehiclePricingSnapshot = {
@@ -198,14 +209,14 @@ export const valetApi = {
 
     const newVehicle: Vehicle = {
       id: createId("v"),
-      plate: input.plate.toUpperCase(),
-      brand: "Não informado",
+      plate: normalizedPlate,
+      brand: "NÃ£o informado",
       model: input.model,
-      color: "Não informado",
+      color: "NÃ£o informado",
       year: new Date().getFullYear(),
       status: "parked",
       entryTime: new Date(),
-      spotId: availableSpot.code,
+      spotId: selectedSpot.code,
       attendantId: onlineAttendant.id,
       clientName: input.clientName,
       clientPhone: input.clientPhone ?? "",
@@ -214,7 +225,7 @@ export const valetApi = {
       unitName: input.unitName ?? DEFAULT_UNIT_NAME,
       spotHistory: [
         {
-          spotId: availableSpot.code,
+          spotId: selectedSpot.code,
           changedAt: new Date(),
           changedBy: onlineAttendant.name,
         },
@@ -234,12 +245,12 @@ export const valetApi = {
           })
         : undefined,
       pricing,
-      hasSemParar: input.hasSemParar ?? false,
+      
       prepaidPaid: (input.prepaidAmount ?? 0) > 0,
     };
 
     vehiclesDb.unshift(newVehicle);
-    const spot = parkingSpotsDb.find((item) => item.code === availableSpot.code);
+    const spot = parkingSpotsDb.find((item) => item.code === selectedSpot.code);
     if (spot) {
       spot.status = "occupied";
       spot.vehicleId = newVehicle.id;
@@ -274,7 +285,7 @@ export const valetApi = {
   requestVehicle: async (vehicleId: string): Promise<Vehicle> => {
     const vehicle = vehiclesDb.find((item) => item.id === vehicleId);
     if (!vehicle) {
-      throw new Error("Veículo não encontrado");
+      throw new Error("VeÃ­culo nÃ£o encontrado");
     }
 
     vehicle.status = "requested";
@@ -283,8 +294,8 @@ export const valetApi = {
     createActivity({
       id: createId("act"),
       type: "request",
-      title: "Veículo Solicitado",
-      description: `${vehicle.clientName} solicitou o veículo ${vehicle.plate}`,
+      title: "VeÃ­culo Solicitado",
+      description: `${vehicle.clientName} solicitou o veÃ­culo ${vehicle.plate}`,
       time: "agora",
       plate: vehicle.plate,
     });
@@ -295,10 +306,10 @@ export const valetApi = {
   updateVehicleSpot: async (input: UpdateVehicleSpotInput): Promise<Vehicle> => {
     const vehicle = vehiclesDb.find((item) => item.id === input.vehicleId);
     if (!vehicle) {
-      throw new Error("VeÃ­culo nÃ£o encontrado");
+      throw new Error("VeÃƒÂ­culo nÃƒÂ£o encontrado");
     }
     if (vehicle.status === "delivered") {
-      throw new Error("NÃ£o Ã© possÃ­vel trocar vaga de veÃ­culo entregue");
+      throw new Error("NÃƒÂ£o ÃƒÂ© possÃƒÂ­vel trocar vaga de veÃƒÂ­culo entregue");
     }
     if (vehicle.spotId === input.spotId) {
       return simulateNetwork(vehicle);
@@ -306,10 +317,10 @@ export const valetApi = {
 
     const targetSpot = parkingSpotsDb.find((spot) => spot.code === input.spotId);
     if (!targetSpot) {
-      throw new Error("Vaga nÃ£o encontrada");
+      throw new Error("Vaga nÃƒÂ£o encontrada");
     }
     if (targetSpot.status !== "available") {
-      throw new Error("A vaga selecionada nÃ£o estÃ¡ disponÃ­vel");
+      throw new Error("A vaga selecionada nÃƒÂ£o estÃƒÂ¡ disponÃƒÂ­vel");
     }
 
     const previousSpot = parkingSpotsDb.find((spot) => spot.code === vehicle.spotId);
@@ -348,7 +359,7 @@ export const valetApi = {
   registerVehicleExit: async (input: RegisterExitInput): Promise<Vehicle> => {
     const vehicle = vehiclesDb.find((item) => item.id === input.vehicleId);
     if (!vehicle) {
-      throw new Error("Veículo não encontrado");
+      throw new Error("VeÃ­culo nÃ£o encontrado");
     }
 
     vehicle.status = "delivered";
@@ -380,7 +391,7 @@ export const valetApi = {
     createActivity({
       id: createId("act"),
       type: "exit",
-      title: "Saída Registrada",
+      title: "SaÃ­da Registrada",
       description: `${vehicle.brand} ${vehicle.model} - ${duration} min`,
       time: "agora",
       plate: vehicle.plate,
@@ -394,10 +405,10 @@ export const valetApi = {
     const vehicle = vehiclesDb.find((item) => item.id === input.vehicleId);
 
     if (!attendant) {
-      throw new Error("Manobrista não encontrado");
+      throw new Error("Manobrista nÃ£o encontrado");
     }
     if (!vehicle) {
-      throw new Error("Veículo não encontrado");
+      throw new Error("VeÃ­culo nÃ£o encontrado");
     }
 
     attendant.status = "busy";
@@ -408,7 +419,7 @@ export const valetApi = {
     createActivity({
       id: createId("act"),
       type: "request",
-      title: "Tarefa Atribuída",
+      title: "Tarefa AtribuÃ­da",
       description: `${attendant.name} recebeu ${vehicle.plate}`,
       time: "agora",
       plate: vehicle.plate,
@@ -445,3 +456,4 @@ export const valetApi = {
     return simulateNetwork(client);
   },
 };
+

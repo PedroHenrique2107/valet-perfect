@@ -87,9 +87,6 @@ export function VehicleStatusCard({
             <p className="text-xs text-muted-foreground truncate">{vehicle.model} - {vehicle.clientName}</p>
             <div className="mt-1 flex items-center gap-2">
               <span className={cn("text-xs", vehicle.contractType === "monthly" && "line-through")}>{contractLabel[vehicle.contractType ?? "hourly"]}</span>
-              {vehicle.hasSemParar ? (
-                <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">SemParar</span>
-              ) : null}
               {vehicle.prepaidPaid ? (
                 <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
                   <CircleDollarSign className="h-3 w-3" />
