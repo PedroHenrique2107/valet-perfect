@@ -1,4 +1,4 @@
-﻿import {
+﻿import { // Mock databases
   activitiesDb,
   attendantsDb,
   clientsDb,
@@ -8,17 +8,17 @@
   transactionsDb,
   vehiclesDb,
 } from "@/data/mockDb";
-import {
+import { // Config and helpers
   getParkingById,
   PARKING_OPTIONS,
 } from "@/config/parkings";
-import {
+import { // Pricing config
   DEFAULT_UNIT_NAME,
   PARKING_DAILY_RATE,
   PARKING_TABLE_NAME,
   getAgreementById,
-} from "@/config/pricing";
-import type {
+} from "@/config/pricing"; 
+import type { // Types and interfaces
   Activity,
   Attendant,
   Client,
@@ -33,89 +33,104 @@ import type {
   VehiclePricingSnapshot,
 } from "@/types/valet";
 
-export interface CreateVehicleInput {
-  plate: string;
-  spotId: string;
-  model: string;
-  clientName: string;
-  clientPhone?: string;
-  observations?: string;
-  prepaidAmount?: number;
-  prepaidAgreementId?: string;
-  prepaidPaymentMethod?: Transaction["paymentMethod"];
-  contractType?: ContractType;
-  unitName?: string;
-  createInspection?: boolean;
-  inspection?: VehicleInspection;
+// Tipo de entrada para criar um veículo
+export interface CreateVehicleInput { 
+  plate: string; // Placa do veículo
+  spotId: string; // ID da vaga onde o veículo será estacionado
+  model: string; // Modelo do veículo
+  clientName: string; // Nome do cliente proprietário do veículo
+  clientPhone?: string; // Telefone do cliente (opcional)
+  observations?: string; // Observações adicionais sobre o veículo ou serviço (opcional)
+  prepaidAmount?: number; // Valor pré-pago para o serviço, se aplicável (opcional)
+  prepaidAgreementId?: string; // ID do acordo de pré-pagamento, se aplicável (opcional)
+  prepaidPaymentMethod?: Transaction["paymentMethod"]; // Método de pagamento para o pré-pagamento, se aplicável (opcional)
+  contractType?: ContractType; // Tipo de contrato para o serviço (opcional, padrão é "hourly")
+  unitName?: string; // Nome da unidade de cobrança, se aplicável (opcional)
+  createInspection?: boolean; // Indica se deve criar uma inspeção veicular inicial (opcional, padrão é false)
+  inspection?: VehicleInspection; // Detalhes da inspeção veicular, se createInspection for true (opcional)
 }
 
-export interface RegisterExitInput {
-  vehicleId: string;
-  paymentMethod: Transaction["paymentMethod"];
-  amount: number;
+// Tipo de entrada para registrar a saída de um veículo
+export interface RegisterExitInput { 
+  vehicleId: string; // ID do veículo que está saindo
+  paymentMethod: Transaction["paymentMethod"]; // Método de pagamento utilizado para a transação de saída
+  amount: number; // Valor total a ser cobrado pela estadia do veículo, calculado com base na duração e tarifas aplicáveis
 }
 
-export interface UpdateVehicleSpotInput {
-  vehicleId: string;
-  spotId: string;
+// Tipo de entrada para atualizar a vaga de um veículo
+export interface UpdateVehicleSpotInput { 
+  vehicleId: string; // ID do veículo que terá a vaga atualizada
+  spotId: string; // ID da nova vaga onde o veículo será movido
 }
 
-export interface AssignTaskInput {
-  attendantId: string;
-  vehicleId: string;
+// Tipo de entrada para atribuir uma tarefa de movimentação a um manobrista
+export interface AssignTaskInput { 
+  attendantId: string; // ID do Manobrista que receberá a tarefa
+  vehicleId: string; // ID do veículo que será movimentado pelo manobrista
 }
 
+// Tipo de entrada para criar um novo cliente
 export interface CreateClientInput {
-  name: string;
-  email: string;
-  phone: string;
-  cpf?: string;
-  tier: Client["tier"];
+  name: string; // Nome do cliente
+  email: string; // Email do cliente
+  phone: string; // Telefone do cliente
+  cpf?: string; // CPF do cliente (opcional)
+  tier: Client["tier"]; // Nível de fidelidade do cliente (ex: bronze, silver, gold)
 }
 
+// Tipo de entrada para criar um novo manobrista
 export interface CreateAttendantInput {
-  name: string;
-  phone: string;
-  parkingId: string;
-  workPeriodStart: string;
-  workPeriodEnd: string;
-  maxWorkHours: number;
+  name: string; // Nome do manobrista
+  phone: string; // Telefone do manobrista
+  parkingId: string; // ID do estacionamento onde o manobrista irá trabalhar
+  workPeriodStart: string; // Horário de início do período de trabalho do manobrista (formato "HH:mm")
+  workPeriodEnd: string; // Horário de término do período de trabalho do manobrista (formato "HH:mm")
+  maxWorkHours: number; // Número máximo de horas que o manobrista pode trabalhar em um dia
 }
 
+// Tipos de resultado para operações de limpeza de dados
 export interface ClearAllVehiclesResult {
-  removedVehicles: number;
+  removedVehicles: number; // Número de veículos removidos da base de dados
 }
 
-export interface ClearAllAttendantsResult {
-  removedAttendants: number;
+
+export interface ClearAllAttendantsResult { 
+  removedAttendants: number; // Número de manobristas removidos da base de dados
 }
 
-const LATENCY_MS = 120;
+const LATENCY_MS = 120; // 120 milissegundos de latência simulada para todas as operações da API
 
+// Função utilitária para simular latência de rede em chamadas de API
 function simulateNetwork<T>(data: T): Promise<T> {
   return new Promise((resolve) => {
     window.setTimeout(() => resolve(data), LATENCY_MS);
   });
 }
 
+// Função utilitária para criar IDs únicos para diferentes entidades (veículos, manobristas, transações, atividades, etc.)
 function createId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 }
 
+// Função para criar uma nova atividade no sistema, adicionando-a ao início da lista de atividades (mais recentes primeiro)
 function createActivity(activity: Activity) {
   activitiesDb.unshift(activity);
 }
 
+// Função para calcular e retornar um snapshot dos principais indicadores do dashboard, como número total de veículos, vagas disponíveis, taxa de ocupação, receita do dia, duração média de estadia, número de manobristas ativos, veículos aguardando e tempo médio de espera
 function getDashboardStatsSnapshot(): DashboardStats {
-  const activeVehicles = vehiclesDb.filter((vehicle) => vehicle.status !== "delivered");
-  const availableSpots = parkingSpotsDb.filter((spot) => spot.status === "available").length;
-  const occupiedSpots = parkingSpotsDb.filter((spot) => spot.status === "occupied").length;
-  const completedTransactions = transactionsDb.filter((tx) => tx.status === "completed");
-  const activeAttendants = attendantsDb.filter((attendant) => attendant.isOnline).length;
-  const waitingVehicles = vehiclesDb.filter(
+  const activeVehicles = vehiclesDb.filter((vehicle) => vehicle.status !== "delivered"); // Considera veículos em qualquer status exceto "delivered" como ativos
+  const availableSpots = parkingSpotsDb.filter((spot) => spot.status === "available").length; // Conta o número de vagas disponíveis
+  const occupiedSpots = parkingSpotsDb.filter((spot) => spot.status === "occupied").length; // Conta o número de vagas ocupadas
+  const completedTransactions = transactionsDb.filter((tx) => tx.status === "completed"); // Filtra as transações que foram concluídas
+  const activeAttendants = attendantsDb.filter((attendant) => attendant.isOnline).length; // Conta o número de manobristas ativos
+
+  // Filtra os veículos que estão aguardando para serem entregues (status "requested" ou "in_transit")
+  const waitingVehicles = vehiclesDb.filter( 
     (vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit",
   );
 
+  // Calcula a duração média de estadia dos veículos ativos, considerando o tempo desde a entrada até o momento atual, e arredonda para o número inteiro mais próximo
   const avgStayDuration =
     activeVehicles.length > 0
       ? Math.round(
@@ -123,7 +138,8 @@ function getDashboardStatsSnapshot(): DashboardStats {
             activeVehicles.length,
         )
       : 0;
-
+  
+  // Calcula o tempo médio de espera dos veículos que estão aguardando, considerando o tempo desde a solicitação até o momento atual, e arredonda para uma casa decimal
   const avgWaitTime =
     waitingVehicles.length > 0
       ? Math.round(
@@ -133,18 +149,20 @@ function getDashboardStatsSnapshot(): DashboardStats {
         ) / 10
       : 0;
 
+  // Retorna um objeto com os principais indicadores do dashboard
   return {
-    totalVehicles: activeVehicles.length,
-    availableSpots,
-    occupancyRate: parkingSpotsDb.length > 0 ? Math.round((occupiedSpots / parkingSpotsDb.length) * 100) : 0,
-    todayRevenue: completedTransactions.reduce((acc, tx) => acc + tx.amount, 0),
-    avgStayDuration,
-    activeAttendants,
-    vehiclesWaiting: waitingVehicles.length,
-    avgWaitTime,
+    totalVehicles: activeVehicles.length, // Número total de veículos ativos (em qualquer status exceto "delivered")
+    availableSpots, // Número de vagas disponíveis
+    occupancyRate: parkingSpotsDb.length > 0 ? Math.round((occupiedSpots / parkingSpotsDb.length) * 100) : 0, // Taxa de ocupação calculada como a porcentagem de vagas ocupadas em relação ao total de vagas
+    todayRevenue: completedTransactions.reduce((acc, tx) => acc + tx.amount, 0), // Receita total do dia calculada como a soma dos valores das transações concluídas
+    avgStayDuration, // Duração média de estadia dos veículos ativos, em minutos
+    activeAttendants, // Número de manobristas ativos (online)
+    vehiclesWaiting: waitingVehicles.length, // Número de veículos que estão aguardando para serem entregues (status "requested" ou "in_transit")
+    avgWaitTime, // Tempo médio de espera dos veículos que estão aguardando, em minutos
   };
 }
 
+// Objeto que representa a API do sistema de valet, contendo métodos para obter dados, criar e atualizar veículos, atribuir tarefas a manobristas, criar clientes e manobristas, e limpar dados para testes. Cada método simula uma chamada de API com latência e manipula os dados nas "bases de dados" mockadas.
 export const valetApi = {
   getVehicles: (): Promise<Vehicle[]> => simulateNetwork([...vehiclesDb]),
   getAttendants: (): Promise<Attendant[]> => simulateNetwork([...attendantsDb]),
@@ -156,9 +174,11 @@ export const valetApi = {
   getClients: (): Promise<Client[]> => simulateNetwork([...clientsDb]),
   getActivities: (): Promise<Activity[]> => simulateNetwork([...activitiesDb]),
   clearAllAttendants: async (): Promise<ClearAllAttendantsResult> => {
+    // Antes de limpar os manobristas, ar
     const removedAttendants = attendantsDb.length;
     attendantsDb.splice(0, attendantsDb.length);
 
+    // Também limpa as referências a manobristas nos veículos e vagas, e reseta o status dos veículos para "parked" se eles estavam
     createActivity({
       id: createId("act"),
       type: "alert",
@@ -167,6 +187,7 @@ export const valetApi = {
       time: "agora",
     });
 
+    // Retorna o número de manobristas removidos para informar o resultado da operação
     return simulateNetwork({ removedAttendants });
   },
   clearAllVehicles: async (): Promise<ClearAllVehiclesResult> => {
@@ -174,12 +195,14 @@ export const valetApi = {
     const removedVehicles = vehiclesDb.length;
     vehiclesDb.splice(0, vehiclesDb.length);
 
+    // Limpa as referências aos veículos removidos nas vagas
     parkingSpotsDb.forEach((spot) => {
-      if (spot.vehicleId) {
+      if (spot.vehicleId) { // Se a vaga tem um veículo atribuído
         delete spot.vehicleId;
       }
+      // Se a vaga estava ocupada ou reservada, reseta para disponível, já que o veículo foi removido
       if (spot.status === "occupied" || spot.status === "reserved") {
-        spot.status = "available";
+        spot.status = "available"; 
       }
     });
 
@@ -198,9 +221,10 @@ export const valetApi = {
       }
     }
 
-    createActivity({
-      id: createId("act"),
-      type: "alert",
+    // Registra uma atividade de alerta informando que a base de veículos foi limpa e quantos veículos foram removidos, para fins de monitoramento e testes
+    createActivity({ 
+      id: createId("act"), 
+      type: "alert", 
       title: "Base de Veiculos Limpa",
       description: `${removedVehicles} veiculo(s) removido(s) para testes`,
       time: "agora",
@@ -209,6 +233,7 @@ export const valetApi = {
     return simulateNetwork({ removedVehicles });
   },
 
+  // Cria um novo veículo e o adiciona à base de dados, associando-o a uma vaga disponível e a um manobrista online. Verifica se já existe um veículo ativo com a mesma placa, se a vaga selecionada está
   createVehicle: async (input: CreateVehicleInput): Promise<Vehicle> => {
     const normalizedPlate = input.plate.toUpperCase();
     const existingActiveVehicle = vehiclesDb.find(
@@ -230,9 +255,10 @@ export const valetApi = {
       (attendant) => attendant.isOnline && attendant.status === "online",
     );
     if (!onlineAttendant) {
-      throw new Error("NÃ£o hÃ¡ manobristas online no momento");
+      throw new Error("Não há manobristas online no momento");
     }
 
+    // Calcula o snapshot de precificação para o veículo com base na configuração de tarifas, no tipo de contrato e no acordo de pré-pagamento selecionado, para ser usado posteriormente no cálculo do valor a ser cobrado na saída
     const pricing: VehiclePricingSnapshot = {
       tableName: PARKING_TABLE_NAME,
       dailyRate: PARKING_DAILY_RATE,
@@ -240,22 +266,23 @@ export const valetApi = {
       courtesyApplied: "Sem cortesia",
     };
 
+    // Cria um novo objeto de veículo com os dados fornecidos, associando-o à vaga
     const newVehicle: Vehicle = {
-      id: createId("v"),
-      plate: normalizedPlate,
-      brand: "NÃ£o informado",
-      model: input.model,
-      color: "NÃ£o informado",
-      year: new Date().getFullYear(),
-      status: "parked",
-      entryTime: new Date(),
-      spotId: selectedSpot.code,
-      attendantId: onlineAttendant.id,
-      clientName: input.clientName,
-      clientPhone: input.clientPhone ?? "",
-      observations: input.observations,
-      contractType: input.contractType ?? "hourly",
-      unitName: input.unitName ?? DEFAULT_UNIT_NAME,
+      id: createId("v"), // Gera um ID único para o veículo
+      plate: normalizedPlate, // Armazena a placa do veículo em letras maiúsculas para padronização
+      brand: "Não informado", // Marca do veículo, inicialmente definida como "Não informado" (poderia ser preenchida posteriormente com uma função de reconhecimento de marca/modelo a partir da placa)
+      model: input.model, // Modelo do veículo, fornecido na entrada
+      color: "Não informado", // Cor do veículo, inicialmente definida como "Não informado" (poderia ser preenchida posteriormente com uma função de reconhecimento de cor a partir da placa ou de uma inspeção visual) 
+      year: new Date().getFullYear(), // Ano do veículo, inicialmente definido como o ano atual (poderia ser preenchido posteriormente com uma função de reconhecimento de ano a partir da placa ou de uma inspeção visual)
+      status: "parked", // Status inicial do veículo definido como "parked" (estacionado), indicando que o veículo está na vaga, mas ainda não foi solicitado para saída
+      entryTime: new Date(), // Data e hora de entrada do veículo, definida como o momento atual
+      spotId: selectedSpot.code, // Código da vaga onde o veículo está estacionado, fornecido na entrada 
+      attendantId: onlineAttendant.id, // ID do manobrista online que está associado ao veículo, para fins de atribuição de tarefas e monitoramento de desempenho
+      clientName: input.clientName, // Nome do cliente proprietário do veículo, fornecido na entrada
+      clientPhone: input.clientPhone ?? "", // Telefone do cliente, fornecido na entrada ou definido como string vazia se não for fornecido
+      observations: input.observations, // Observações adicionais sobre o veículo ou serviço, fornecidas na entrada (opcional)
+      contractType: input.contractType ?? "hourly", // Tipo de contrato para o serviço, fornecido na entrada ou definido como "hourly" (por hora) se não for fornecido
+      unitName: input.unitName ?? DEFAULT_UNIT_NAME, // Nome da unidade de cobrança, fornecido na entrada ou definido como DEFAULT_UNIT_NAME se não for fornecido
       spotHistory: [
         {
           spotId: selectedSpot.code,
@@ -263,6 +290,7 @@ export const valetApi = {
           changedBy: onlineAttendant.name,
         },
       ],
+      // Se createInspection for true, usa os detalhes da inspeção fornecidos na entrada ou cria uma inspeção padrão com todos os itens marcados como "true" e a data de conclusão definida como o momento atual. Se createInspection for false ou não for fornecido, a propriedade "inspection" será undefined, indicando que nenhuma inspeção inicial foi criada para este veículo.
       inspection: input.createInspection
         ? (input.inspection ?? {
             leftSide: true,
@@ -282,6 +310,7 @@ export const valetApi = {
       prepaidPaid: (input.prepaidAmount ?? 0) > 0,
     };
 
+    // Adiciona o novo veículo à base de dados, associando-o à vaga selecionada e atualizando o status da vaga para "occupied". Se um valor pré-pago foi fornecido, cria uma transação de pré-pagamento associada ao veículo. Registra uma atividade de entrada para monitoramento e histórico do sistema. Retorna o novo veículo criado após simular a latência de rede.
     vehiclesDb.unshift(newVehicle);
     const spot = parkingSpotsDb.find((item) => item.code === selectedSpot.code);
     if (spot) {
@@ -303,6 +332,7 @@ export const valetApi = {
       });
     }
 
+    // Registra uma atividade de entrada para monitoramento e histórico do sistema, indicando que um novo veículo foi criado e estacionado na vaga selecionada
     createActivity({
       id: createId("act"),
       type: "entry",
@@ -315,20 +345,22 @@ export const valetApi = {
     return simulateNetwork(newVehicle);
   },
 
+  // Atualiza o status de um veículo para "requested" quando ele é solicitado para saída, registra a data e hora da solicitação, e cria uma atividade de solicitação para monitoramento e histórico do sistema. Retorna o veículo atualizado após simular a latência de rede.
   requestVehicle: async (vehicleId: string): Promise<Vehicle> => {
     const vehicle = vehiclesDb.find((item) => item.id === vehicleId);
     if (!vehicle) {
-      throw new Error("VeÃ­culo nÃ£o encontrado");
+      throw new Error("Veículo não encontrado");
     }
 
     vehicle.status = "requested";
     vehicle.requestedAt = new Date();
 
+    // Registra uma atividade de solicitação para monitoramento e histórico do sistema, indicando que o veículo foi solicitado para saída
     createActivity({
       id: createId("act"),
       type: "request",
-      title: "VeÃ­culo Solicitado",
-      description: `${vehicle.clientName} solicitou o veÃ­culo ${vehicle.plate}`,
+      title: "Veículo Solicitado",
+      description: `${vehicle.clientName} solicitou o veículo ${vehicle.plate}`,
       time: "agora",
       plate: vehicle.plate,
     });
@@ -336,13 +368,14 @@ export const valetApi = {
     return simulateNetwork(vehicle);
   },
 
+  // Atualiza a vaga de um veículo, verificando se o veículo existe, se não está entregue, se a nova vaga existe e está disponível, e atualizando as referências nas vagas e no veículo. Registra uma atividade de troca de vaga para monitoramento e histórico do sistema. Retorna o veículo atualizado após simular a latência de rede.
   updateVehicleSpot: async (input: UpdateVehicleSpotInput): Promise<Vehicle> => {
     const vehicle = vehiclesDb.find((item) => item.id === input.vehicleId);
     if (!vehicle) {
-      throw new Error("VeÃƒÂ­culo nÃƒÂ£o encontrado");
+      throw new Error("Veículo não encontrado");
     }
     if (vehicle.status === "delivered") {
-      throw new Error("NÃƒÂ£o ÃƒÂ© possÃƒÂ­vel trocar vaga de veÃƒÂ­culo entregue");
+      throw new Error("Não é possível trocar vaga de veículo entregue");
     }
     if (vehicle.spotId === input.spotId) {
       return simulateNetwork(vehicle);
@@ -350,10 +383,10 @@ export const valetApi = {
 
     const targetSpot = parkingSpotsDb.find((spot) => spot.code === input.spotId);
     if (!targetSpot) {
-      throw new Error("Vaga nÃƒÂ£o encontrada");
+      throw new Error("Vaga não encontrada");
     }
     if (targetSpot.status !== "available") {
-      throw new Error("A vaga selecionada nÃƒÂ£o estÃƒÂ¡ disponÃƒÂ­vel");
+      throw new Error("A vaga selecionada não está disponível");
     }
 
     const previousSpot = parkingSpotsDb.find((spot) => spot.code === vehicle.spotId);
@@ -377,6 +410,7 @@ export const valetApi = {
       },
     ];
 
+    // Registra uma atividade de troca de vaga para monitoramento e histórico do sistema, indicando que o veículo foi movido para uma nova vaga
     createActivity({
       id: createId("act"),
       type: "entry",
@@ -389,10 +423,11 @@ export const valetApi = {
     return simulateNetwork(vehicle);
   },
 
+  // Registra a saída de um veículo, atualizando seu status para "delivered", registrando a hora de saída, liberando a vaga associada, atualizando as estatísticas do manobrista responsável, criando uma transação de pagamento para a estadia do veículo, e registrando uma atividade de saída para monitoramento e histórico do sistema. Retorna o veículo atualizado após simular a latência de rede.
   registerVehicleExit: async (input: RegisterExitInput): Promise<Vehicle> => {
     const vehicle = vehiclesDb.find((item) => item.id === input.vehicleId);
     if (!vehicle) {
-      throw new Error("VeÃ­culo nÃ£o encontrado");
+      throw new Error("Veículo não encontrado");
     }
 
     vehicle.status = "delivered";
@@ -416,6 +451,7 @@ export const valetApi = {
       delete attendant.currentVehicleId;
     }
 
+    // Cria uma transação de pagamento para a estadia do veículo, associando-a ao veículo e registrando o valor cobrado, o método de pagamento, e gerando um número de recibo único. O valor cobrado é fornecido na entrada, mas poderia ser calculado com base na duração da estadia e nas tarifas aplicáveis usando o snapshot de precificação armazenado no veículo.
     transactionsDb.unshift({
       id: createId("t"),
       vehicleId: vehicle.id,
@@ -428,10 +464,11 @@ export const valetApi = {
       duration,
     });
 
+    // Registra uma atividade de saída para monitoramento e histórico do sistema, indicando que o veículo foi entregue e a duração da estadia, para fins de análise e acompanhamento do desempenho do serviço
     createActivity({
       id: createId("act"),
       type: "exit",
-      title: "SaÃ­da Registrada",
+      title: "Saída Registrada",
       description: `${vehicle.brand} ${vehicle.model} - ${duration} min`,
       time: "agora",
       plate: vehicle.plate,
@@ -440,15 +477,16 @@ export const valetApi = {
     return simulateNetwork(vehicle);
   },
 
+  // Atribui uma tarefa de movimentação a um manobrista, atual
   assignTask: async (input: AssignTaskInput): Promise<Attendant> => {
     const attendant = attendantsDb.find((item) => item.id === input.attendantId);
     const vehicle = vehiclesDb.find((item) => item.id === input.vehicleId);
 
     if (!attendant) {
-      throw new Error("Manobrista nÃ£o encontrado");
+      throw new Error("Manobrista não encontrado");
     }
     if (!vehicle) {
-      throw new Error("VeÃ­culo nÃ£o encontrado");
+      throw new Error("Veículo não encontrado");
     }
 
     attendant.status = "commuting";
@@ -456,10 +494,11 @@ export const valetApi = {
     vehicle.status = "in_transit";
     vehicle.attendantId = attendant.id;
 
+    // Registra uma atividade de solicitação para monitoramento e histórico do sistema, indicando que o veículo foi solicitado para
     createActivity({
       id: createId("act"),
       type: "request",
-      title: "Tarefa AtribuÃ­da",
+      title: "Tarefa Atribuída",
       description: `${attendant.name} recebeu ${vehicle.plate}`,
       time: "agora",
       plate: vehicle.plate,
@@ -468,6 +507,7 @@ export const valetApi = {
     return simulateNetwork(attendant);
   },
 
+  // Cria um novo cliente e o adiciona à base de dados, registrando uma atividade de cadastro para monitoramento e histórico do sistema. Retorna o novo cliente criado após simular a latência de rede.
   createClient: async (input: CreateClientInput): Promise<Client> => {
     const client: Client = {
       id: createId("c"),
@@ -485,6 +525,7 @@ export const valetApi = {
 
     clientsDb.unshift(client);
 
+    // Registra uma atividade de cadastro para monitoramento e histórico do sistema, indicando que um novo cliente foi criado
     createActivity({
       id: createId("act"),
       type: "entry",
@@ -496,6 +537,7 @@ export const valetApi = {
     return simulateNetwork(client);
   },
 
+  // Cria um novo manobrista e o adiciona à base de dados, associando-o a um estacionamento e definindo seu período de trabalho. Verifica se os campos obrigatórios estão preenchidos, normaliza os dados de entrada, e registra uma atividade de cadastro para monitoramento e histórico do sistema. Retorna o novo manobrista criado após simular a latência de rede.
   createAttendant: async (input: CreateAttendantInput): Promise<Attendant> => {
     const normalizedPhone = input.phone.trim();
     const normalizedName = input.name.trim();
@@ -513,6 +555,7 @@ export const valetApi = {
           ? "afternoon"
           : "night";
 
+    // Antes de criar o manobrista, verifica se já existe um manobrista com o mesmo nome e telefone para evitar duplicatas, e lança um erro se encontrar um registro existente. Isso ajuda a manter a integridade dos dados e evita confusões na atribuição de tarefas e monitoramento de desempenho.
     const newAttendant: Attendant = {
       id: createId("a"),
       name: normalizedName,
@@ -535,6 +578,7 @@ export const valetApi = {
 
     attendantsDb.unshift(newAttendant);
 
+    // Registra uma atividade de cadastro para monitoramento e histórico do sistema, indicando que um novo manobrista foi criado e associado ao estacionamento
     createActivity({
       id: createId("act"),
       type: "entry",

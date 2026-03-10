@@ -1,87 +1,205 @@
-# Welcome to your Lovable project
+# ValetTracker
 
-## Project info
+Painel operacional de valet parking construido com React, TypeScript, Vite, Tailwind e `shadcn/ui`.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+O projeto atual representa uma base frontend para operacao e supervisao de patios de valet, com foco em:
 
-## How can I edit this code?
+- dashboard operacional;
+- gestao de veiculos;
+- gestao de manobristas;
+- mapa do patio;
+- visao financeira;
+- simulacao de papeis de acesso.
 
-There are several ways of editing your application.
+## Objetivo do sistema
 
-**Use Lovable**
+O ValetTracker foi pensado para centralizar a operacao do valet em uma interface unica, permitindo acompanhar:
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- entrada e saida de veiculos;
+- ocupacao de vagas;
+- produtividade e jornada dos manobristas;
+- movimentacao financeira;
+- indicadores operacionais do dia.
 
-Changes made via Lovable will be committed automatically to this repo.
+No estado atual, o perfil que melhor representa a visao global e o `admin`. Em termos de negocio, ele funciona como o papel mais proximo de um Supervisor Geral, embora o papel `supervisor` ainda nao exista tecnicamente no codigo.
 
-**Use your preferred IDE**
+## Stack principal
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- React 18
+- TypeScript
+- Vite
+- React Router DOM
+- TanStack React Query
+- Tailwind CSS
+- `shadcn/ui` + Radix UI
+- Vitest
+- ESLint
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Requisitos
 
-Follow these steps:
+- Node.js 18+ (recomendado Node 20+)
+- npm 9+ ou 10+
+- Git
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## Como rodar localmente
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Instale as dependencias:
 
-# Step 3: Install the necessary dependencies.
-npm i
+```bash
+npm install
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Suba o ambiente de desenvolvimento:
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Outros comandos uteis:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+npm run build
+npm run preview
+npm run test
+npm run test:watch
+npm run lint
+```
 
-**Use GitHub Codespaces**
+## Arquitetura resumida
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+O fluxo tecnico principal da aplicacao e:
 
-## What technologies are used for this project?
+1. `index.html` entrega o HTML base com o `#root`.
+2. `src/main.tsx` monta o React.
+3. `src/App.tsx` configura providers, rotas e protecao por papel.
+4. `src/pages/*` monta cada tela principal.
+5. `src/hooks/useValetData.ts` organiza queries e mutations.
+6. `src/services/valetApi.ts` simula a API.
+7. `src/data/mockDb.ts` guarda os dados em memoria.
 
-This project is built with:
+## Estrutura principal
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Raiz
 
-## How can I deploy this project?
+- `package.json`: scripts, dependencias e metadados.
+- `vite.config.ts`: configuracao de dev server, alias e build.
+- `vitest.config.ts`: configuracao de testes.
+- `tailwind.config.ts`: tema e extensoes do Tailwind.
+- `index.html`: HTML base da aplicacao.
+- `GUIA_TECNICO_VALETTRACKER.md`: documentacao tecnica detalhada por pasta/arquivo.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+### `src/pages/`
 
-## Can I connect a custom domain to my Lovable project?
+- `Dashboard.tsx`: visao geral do dia com KPIs, mapa, graficos e feed.
+- `VehiclesPage.tsx`: operacao de veiculos.
+- `AttendantsPage.tsx`: operacao da equipe de manobristas.
+- `ParkingMapPage.tsx`: mapa do patio.
+- `FinancialPage.tsx`: resumo financeiro e transacoes.
 
-Yes, you can!
+### `src/components/`
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- `layout/`: estrutura da interface, principalmente `MainLayout` e `Sidebar`.
+- `dashboard/`: cards, graficos, mapa e componentes de resumo.
+- `forms/`: dialogs operacionais como entrada, saida, vistoria, clientes e manobristas.
+- `auth/`: protecao de rotas.
+- `ui/`: componentes base reutilizaveis do design system.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+### `src/services/`
 
+- `valetApi.ts`: simula a camada de negocio e alteracao de dados.
 
+### `src/data/`
 
+- `mockDb.ts`: base fake em memoria.
 
+### `src/config/`
 
+- `pricing.ts`: tabela de cobranca, diaria e convenios.
+- `parkings.ts`: unidades/patios disponiveis.
 
-## IDEIA INICIAL
+### `src/types/`
 
-Primeiro desenvolver um aplicativo para o CEO da empresa com visualização de tudo, depois ir separando por {Supervisor, Líder e Manobrista}
+- `valet.ts`: tipos do dominio.
+- `auth.ts`: tipos de papel e permissao.
 
-Ideia é seguir o fluxo:
+## Estado atual da aplicacao
 
-Local do Patio -> Usuários daquele pátio -> Quanto entro naquele caixa naquele dia -> Quantos carros 
-Usuário vai abrir um caixa -> Registrar entrada e saida dos carros -> Selecionar as vagas ocupadas -> Fechar caixa
+Hoje este repositorio e um frontend com dados mockados.
+
+Isso significa:
+
+- nao existe backend real neste projeto;
+- nao existe persistencia real;
+- as alteracoes se perdem ao recarregar a pagina;
+- autenticacao e sessao sao simuladas localmente;
+- o sistema ainda nao esta preparado de forma completa para multiunidade real.
+
+## Perfis atuais
+
+Os perfis hoje implementados sao:
+
+- `admin`
+- `attendant`
+- `cashier`
+
+As permissoes ficam principalmente em:
+
+- `src/auth/permissions.ts`
+- `src/types/auth.ts`
+- `src/contexts/AuthContext.tsx`
+
+## Direcao de produto recomendada
+
+Considerando que o primeiro perfil de acesso real sera o Supervisor responsavel pelos contratos da empresa, a evolucao mais importante neste momento e sair da visao apenas operacional local e caminhar para uma visao consolidada.
+
+### Recomendacao principal para Supervisor
+
+Vale muito a pena incluir um consolidado multiunidade no topo das abas, com:
+
+- seletor de contrato;
+- seletor de patio/unidade;
+- cards de excecao operacional;
+- destaque rapido do que esta fora do esperado.
+
+O motivo e simples:
+
+- esse perfil nao quer ver somente o detalhe do dia;
+- ele precisa descobrir rapidamente onde esta o problema;
+- ele precisa comparar unidades, identificar gargalos e agir antes da operacao degradar.
+
+### Aplicacao pratica nas abas
+
+#### Veiculos
+
+Itens prioritarios para Supervisor:
+
+- filtro por unidade/patio;
+- SLA de retirada;
+- fila de solicitacoes atrasadas;
+- placas com maior recorrencia;
+- alertas VIP, mensalista e convenio;
+- tempo parado acima do limite.
+
+#### Manobristas
+
+Itens prioritarios para Supervisor:
+
+- produtividade por patio;
+- jornada atual vs limite;
+- tempo medio de entrega;
+- fila por manobrista;
+- alertas de excesso, ociosidade e gargalo;
+- comparativo entre turnos e entre unidades.
+
+## Observacoes tecnicas importantes
+
+- `src/App.css` parece legado do template inicial e tem pouco peso na interface atual.
+- `src/index.css` concentra a maior parte da identidade visual global.
+- parte dos textos esta com problema de encoding/acentuacao.
+- `vite.config.ts` possui `hmr.host` fixo em `192.168.1.59`, o que pode exigir ajuste em outros ambientes.
+
+## Proximo documento para consulta
+
+Para leitura tecnica mais profunda da estrutura por pasta e arquivo, consulte:
+
+- [GUIA_TECNICO_VALETTRACKER.md](./GUIA_TECNICO_VALETTRACKER.md)
