@@ -4,12 +4,13 @@ import {
   Layers,
   Plus,
   RefreshCw,
-  Settings,
   ShieldAlert,
   Wrench,
 } from "lucide-react";
 import { ParkingMap } from "@/components/dashboard/ParkingMap";
+import { ParkingFloorManagerDialog } from "@/components/forms/ParkingFloorManagerDialog";
 import { ParkingSpotConfigDialog } from "@/components/forms/ParkingSpotConfigDialog";
+import { ParkingSpotStatusDialog } from "@/components/forms/ParkingSpotStatusDialog";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,11 +22,13 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
+  useDeleteParkingSpotMutation,
   useMoveParkingSpotMutation,
   useParkingSpotsQuery,
   useUpdateParkingSpotConfigMutation,
   useVehiclesQuery,
 } from "@/hooks/useValetData";
+import { getGlobalSectionOrder, sortSectionsByOrder } from "@/lib/parkingLayout";
 import type { ParkingSpot } from "@/types/valet";
 
 const statusLabels: Record<ParkingSpot["status"], string> = {
@@ -48,15 +51,17 @@ export default function ParkingMapPage() {
   const { data: vehicles = [] } = useVehiclesQuery();
   const moveParkingSpot = useMoveParkingSpotMutation();
   const updateParkingSpotConfig = useUpdateParkingSpotConfigMutation();
+  const deleteParkingSpot = useDeleteParkingSpotMutation();
   const { toast } = useToast();
 
-  const [showFloorControls, setShowFloorControls] = useState(false);
   const [selectedFloor, setSelectedFloor] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<ParkingSpot["status"] | "all">("all");
   const [selectedSection, setSelectedSection] = useState<string>("all");
   const [selectedSpotId, setSelectedSpotId] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [floorManagerOpen, setFloorManagerOpen] = useState(false);
 
   const floorOptions = useMemo(
     () => Array.from(new Set(parkingSpots.map((spot) => spot.floor))).sort((left, right) => left - right),
@@ -68,8 +73,26 @@ export default function ParkingMapPage() {
       selectedFloor === "all"
         ? parkingSpots
         : parkingSpots.filter((spot) => spot.floor === Number(selectedFloor));
-    return Array.from(new Set(source.map((spot) => spot.section))).sort((left, right) => left.localeCompare(right));
+    return sortSectionsByOrder(Array.from(new Set(source.map((spot) => spot.section))), getGlobalSectionOrder(parkingSpots));
   }, [parkingSpots, selectedFloor]);
+
+  const sectionOrder = useMemo(() => getGlobalSectionOrder(parkingSpots), [parkingSpots]);
+
+  const sectionsByFloor = useMemo(() => {
+    return parkingSpots.reduce(
+      (acc, spot) => {
+        if (!acc[spot.floor]) {
+          acc[spot.floor] = [];
+        }
+        if (!acc[spot.floor].includes(spot.section)) {
+          acc[spot.floor].push(spot.section);
+          acc[spot.floor] = sortSectionsByOrder(acc[spot.floor], sectionOrder);
+        }
+        return acc;
+      },
+      {} as Record<number, string[]>,
+    );
+  }, [parkingSpots, sectionOrder]);
 
   const filteredSpots = useMemo(() => {
     return parkingSpots.filter((spot) => {
@@ -88,7 +111,8 @@ export default function ParkingMapPage() {
     blocked: filteredSpots.filter((spot) => spot.status === "blocked").length,
   };
 
-  const occupancyRate = stats.total > 0 ? Math.round((stats.occupied / stats.total) * 100) : 0;
+  const overallOccupancyRate =
+    parkingSpots.length > 0 ? Math.round((parkingSpots.filter((spot) => spot.status === "occupied").length / parkingSpots.length) * 100) : 0;
   const selectedSpot = parkingSpots.find((spot) => spot.id === selectedSpotId) ?? null;
   const selectedVehicle = selectedSpot?.vehicleId
     ? vehicles.find((vehicle) => vehicle.id === selectedSpot.vehicleId) ?? null
@@ -104,6 +128,12 @@ export default function ParkingMapPage() {
       setSelectedSpotId(filteredSpots[0].id);
     }
   }, [filteredSpots, selectedSpotId]);
+
+  useEffect(() => {
+    if (selectedFloor !== "all" && !floorOptions.includes(Number(selectedFloor))) {
+      setSelectedFloor("all");
+    }
+  }, [floorOptions, selectedFloor]);
 
   useEffect(() => {
     if (selectedSection !== "all" && !sectionOptions.includes(selectedSection)) {
@@ -174,16 +204,29 @@ export default function ParkingMapPage() {
     });
   };
 
-  const handleOpenConfig = () => {
-    if (!selectedSpot) {
+  const handleDeleteSpot = async (spot: ParkingSpot) => {
+    const confirmed = window.confirm(`Excluir a vaga ${spot.code}?`);
+    if (!confirmed) return;
+
+    const result = await deleteParkingSpot.mutateAsync(spot.id);
+    toast({
+      title: "Vaga excluida",
+      description: `${result.code} foi removida do mapa.`,
+    });
+  };
+
+  const handleOpenCreateSpot = () => {
+    if (floorOptions.length === 0) {
       toast({
-        title: "Selecione uma vaga",
-        description: "Escolha uma vaga no mapa antes de editar.",
+        title: "Crie um piso primeiro",
+        description: "Cadastre um piso antes de adicionar novas vagas.",
         variant: "destructive",
       });
+      setFloorManagerOpen(true);
       return;
     }
-    setConfigOpen(true);
+
+    setCreateOpen(true);
   };
 
   const handleToggleBlock = async () => {
@@ -206,8 +249,6 @@ export default function ParkingMapPage() {
       section: selectedSpot.section,
       type: selectedSpot.type,
       status: nextStatus,
-      usageRule: selectedSpot.usageRule,
-      capacity: selectedSpot.capacity,
       observations: selectedSpot.observations,
     });
 
@@ -224,7 +265,7 @@ export default function ParkingMapPage() {
           <div>
             <h1 className="text-3xl font-bold text-foreground">Mapa do Patio</h1>
             <p className="text-muted-foreground">
-              Gestao visual do patio com alertas, criacao, edicao, bloqueio e arraste entre secoes
+              Gestao visual do patio com alertas, criacao, bloqueio e arraste entre secoes
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -232,22 +273,13 @@ export default function ParkingMapPage() {
               <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
               Atualizar
             </Button>
-            <Button
-              variant={showFloorControls ? "default" : "outline"}
-              size="sm"
-              className="gap-2"
-              onClick={() => setShowFloorControls((current) => !current)}
-            >
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setFloorManagerOpen(true)}>
               <Layers className="h-4 w-4" />
-              Pisos
+              Gerenciar pisos
             </Button>
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setCreateOpen(true)}>
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleOpenCreateSpot}>
               <Plus className="h-4 w-4" />
               Nova vaga
-            </Button>
-            <Button variant="outline" size="sm" className="gap-2" onClick={handleOpenConfig}>
-              <Settings className="h-4 w-4" />
-              Editar
             </Button>
           </div>
         </div>
@@ -273,84 +305,62 @@ export default function ParkingMapPage() {
           </div>
         )}
 
-        {showFloorControls && (
-          <div className="stat-card space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={selectedFloor === "all" ? "default" : "outline"}
-                onClick={() => setSelectedFloor("all")}
+        <div className="stat-card">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</p>
+              <Select
+                value={selectedStatus}
+                onValueChange={(value) => setSelectedStatus(value as ParkingSpot["status"] | "all")}
               >
-                Todos os pisos
-              </Button>
-              {floorOptions.map((floor) => (
-                <Button
-                  key={floor}
-                  size="sm"
-                  variant={selectedFloor === String(floor) ? "default" : "outline"}
-                  onClick={() => setSelectedFloor(String(floor))}
-                >
-                  Piso {floor}
-                </Button>
-              ))}
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  {Object.entries(statusLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</p>
-                <Select
-                  value={selectedStatus}
-                  onValueChange={(value) => setSelectedStatus(value as ParkingSpot["status"] | "all")}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos os status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os status</SelectItem>
-                    {Object.entries(statusLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Secao</p>
+              <Select value={selectedSection} onValueChange={setSelectedSection}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas as secoes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as secoes</SelectItem>
+                  {sectionOptions.map((section) => (
+                    <SelectItem key={section} value={section}>
+                      Secao {section}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-              <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Secao</p>
-                <Select value={selectedSection} onValueChange={setSelectedSection}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas as secoes" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as secoes</SelectItem>
-                    {sectionOptions.map((section) => (
-                      <SelectItem key={section} value={section}>
-                        Secao {section}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Resumo do filtro</p>
-                <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-                  {selectedFloor === "all" ? "Todos os pisos" : `Piso ${selectedFloor}`} •{" "}
-                  {selectedSection === "all" ? "Todas as secoes" : `Secao ${selectedSection}`} •{" "}
-                  {selectedStatus === "all" ? "Todos os status" : statusLabels[selectedStatus]}
-                </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Resumo do filtro</p>
+              <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                {selectedFloor === "all" ? "Todos os pisos" : `Piso ${selectedFloor}`} •{" "}
+                {selectedSection === "all" ? "Todas as secoes" : `Secao ${selectedSection}`} •{" "}
+                {selectedStatus === "all" ? "Todos os status" : statusLabels[selectedStatus]}
               </div>
             </div>
           </div>
-        )}
+        </div>
 
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <SummaryCard title="Vagas no filtro" value={stats.total} />
           <SummaryCard title="Disponiveis" value={stats.available} accent="success" />
           <SummaryCard title="Ocupadas" value={stats.occupied} accent="destructive" />
           <SummaryCard title="Manutencao" value={stats.maintenance} accent="warning" />
-          <SummaryCard title="Bloqueadas" value={stats.blocked} accent="default" subtitle={`${occupancyRate}% ocupacao`} />
+          <SummaryCard title="ocupacao geral" value={`${overallOccupancyRate}%`} accent="default" />
         </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
@@ -371,6 +381,22 @@ export default function ParkingMapPage() {
                 },
               );
             }}
+            onSpotEdit={(spot) => {
+              setSelectedSpotId(spot.id);
+              setConfigOpen(true);
+            }}
+            onSpotStatus={(spot) => {
+              setSelectedSpotId(spot.id);
+              setStatusDialogOpen(true);
+            }}
+            onSpotDelete={(spot) => {
+              setSelectedSpotId(spot.id);
+              void handleDeleteSpot(spot);
+            }}
+            floorFilterValue={selectedFloor}
+            floorOptions={floorOptions}
+            onFloorFilterChange={setSelectedFloor}
+            sectionOrder={sectionOrder}
             title="Mapa do Patio"
             subtitle="Clique para selecionar e arraste a vaga para reorganizar por piso e secao"
           />
@@ -380,15 +406,12 @@ export default function ParkingMapPage() {
               <div>
                 <h2 className="text-lg font-semibold text-foreground">Detalhes da vaga</h2>
                 <p className="text-sm text-muted-foreground">
-                  Edite, bloqueie ou acompanhe o historico completo da vaga selecionada.
+                  Bloqueie ou acompanhe o historico completo da vaga selecionada.
                 </p>
               </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={handleToggleBlock} disabled={!selectedSpot}>
                   {selectedSpot?.status === "blocked" ? "Desbloquear" : "Bloquear"}
-                </Button>
-                <Button size="sm" variant="outline" onClick={handleOpenConfig} disabled={!selectedSpot}>
-                  Editar
                 </Button>
               </div>
             </div>
@@ -400,8 +423,6 @@ export default function ParkingMapPage() {
                 <Field label="Secao" value={selectedSpot.section} />
                 <Field label="Tipo" value={typeLabels[selectedSpot.type]} />
                 <Field label="Status" value={statusLabels[selectedSpot.status]} />
-                <Field label="Capacidade" value={String(selectedSpot.capacity ?? 1)} />
-                <Field label="Regra de uso" value={selectedSpot.usageRule ?? "Operacao geral"} />
                 <Field label="Observacoes" value={selectedSpot.observations ?? "Sem observacoes"} />
                 <Field label="Veiculo vinculado" value={selectedVehicle?.plate ?? "Nenhum"} />
                 <Field label="Cliente" value={selectedVehicle?.clientName ?? "Sem cliente associado"} />
@@ -436,8 +457,32 @@ export default function ParkingMapPage() {
         </div>
       </div>
 
-      <ParkingSpotConfigDialog open={configOpen} onOpenChange={setConfigOpen} spot={selectedSpot} mode="edit" />
-      <ParkingSpotConfigDialog open={createOpen} onOpenChange={setCreateOpen} spot={null} mode="create" />
+      <ParkingSpotConfigDialog
+        open={configOpen}
+        onOpenChange={setConfigOpen}
+        spot={selectedSpot}
+        mode="edit"
+        floorOptions={floorOptions}
+        sectionsByFloor={sectionsByFloor}
+      />
+      <ParkingSpotConfigDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        spot={null}
+        mode="create"
+        floorOptions={floorOptions}
+        sectionsByFloor={sectionsByFloor}
+      />
+      <ParkingSpotStatusDialog
+        open={statusDialogOpen}
+        onOpenChange={setStatusDialogOpen}
+        spot={selectedSpot}
+      />
+      <ParkingFloorManagerDialog
+        open={floorManagerOpen}
+        onOpenChange={setFloorManagerOpen}
+        spots={parkingSpots}
+      />
     </MainLayout>
   );
 }
@@ -458,7 +503,7 @@ function SummaryCard({
   subtitle,
 }: {
   title: string;
-  value: number;
+  value: number | string;
   accent?: "default" | "success" | "destructive" | "warning";
   subtitle?: string;
 }) {

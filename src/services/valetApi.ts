@@ -72,8 +72,6 @@ export interface UpdateParkingSpotConfigInput {
   code: string; // Codigo visivel da vaga
   floor: number; // Piso da vaga
   section: string; // Secao da vaga
-  usageRule?: string; // Regra operacional da vaga
-  capacity?: number; // Capacidade configurada
   observations?: string; // Observacoes operacionais
 }
 
@@ -84,9 +82,17 @@ export interface CreateParkingSpotInput {
   section: string;
   type: ParkingSpot["type"];
   status: Exclude<ParkingSpot["status"], "occupied">;
-  usageRule?: string;
-  capacity?: number;
   observations?: string;
+}
+
+export interface CreateParkingFloorInput {
+  floor: number;
+  totalSpots: number;
+  spotCategories: Array<"regular" | "maintenance" | "vip" | "electric" | "accessible">;
+  sectionLayout: Array<{
+    name: string;
+    capacity: number;
+  }>;
 }
 
 // Tipo de entrada para movimentar uma vaga entre piso/secoes com drag and drop
@@ -173,6 +179,14 @@ function normalizeSpotCode(code: string): string {
 
 function normalizeSection(section: string): string {
   return section.trim().toUpperCase();
+}
+
+function getNextFloorNumber() {
+  return parkingSpotsDb.reduce((maxFloor, spot) => Math.max(maxFloor, spot.floor), 0) + 1;
+}
+
+function buildGeneratedSpotCode(floor: number, section: string, index: number) {
+  return `P${floor}-${section}-${String(index).padStart(2, "0")}`;
 }
 
 function ensureUniqueSpotCode(code: string, currentSpotId?: string) {
@@ -526,8 +540,6 @@ export const valetApi = {
       section,
       type: input.type,
       status: input.status,
-      usageRule: input.usageRule?.trim() || "Operacao geral",
-      capacity: Math.max(1, input.capacity ?? 1),
       observations: input.observations?.trim() || undefined,
       sortOrder: sectionSpots.length + 1,
       history: [],
@@ -543,6 +555,131 @@ export const valetApi = {
       time: "agora",
     });
     return simulateNetwork(newSpot);
+  },
+
+  createParkingFloor: async (input: CreateParkingFloorInput): Promise<ParkingSpot[]> => {
+    const nextFloor = getNextFloorNumber();
+    if (input.floor !== nextFloor) {
+      throw new Error(`O proximo piso disponivel e ${nextFloor}`);
+    }
+
+    if (input.totalSpots <= 0) {
+      throw new Error("Informe ao menos uma vaga para criar o piso");
+    }
+    if (input.spotCategories.length !== input.totalSpots) {
+      throw new Error("A configuracao das vagas do piso esta incompleta");
+    }
+    if (input.sectionLayout.length === 0) {
+      throw new Error("Configure ao menos uma secao para o novo piso");
+    }
+    const totalSectionCapacity = input.sectionLayout.reduce((sum, section) => sum + section.capacity, 0);
+    if (totalSectionCapacity < input.totalSpots) {
+      throw new Error("A capacidade total das secoes e menor que a quantidade de vagas");
+    }
+
+    const createdSpots: ParkingSpot[] = [];
+    const sectionCounters: Record<string, number> = {};
+
+    input.spotCategories.forEach((category, spotIndex) => {
+      const type: ParkingSpot["type"] =
+        category === "vip"
+          ? "vip"
+          : category === "electric"
+            ? "electric"
+            : category === "accessible"
+              ? "accessible"
+              : "regular";
+      const status: ParkingSpot["status"] = category === "maintenance" ? "maintenance" : "available";
+      let currentCapacity = 0;
+      const section =
+        input.sectionLayout.find((item) => {
+          currentCapacity += item.capacity;
+          return spotIndex < currentCapacity;
+        })?.name ?? input.sectionLayout[input.sectionLayout.length - 1].name;
+
+      sectionCounters[section] = (sectionCounters[section] ?? 0) + 1;
+
+      const spot: ParkingSpot = {
+        id: createId("spot"),
+        code: buildGeneratedSpotCode(input.floor, section, sectionCounters[section]),
+        floor: input.floor,
+        section,
+        type,
+        status,
+        sortOrder: sectionCounters[section],
+        history: [],
+      };
+
+      appendSpotHistory(spot, "created", `Vaga criada na geracao do piso ${input.floor}`);
+      parkingSpotsDb.push(spot);
+      createdSpots.push(spot);
+    });
+
+    createActivity({
+      id: createId("act"),
+      type: "entry",
+      title: "Novo Piso Criado",
+      description: `Piso ${input.floor} criado com ${createdSpots.length} vaga(s)`,
+      time: "agora",
+    });
+
+    return simulateNetwork(createdSpots);
+  },
+
+  deleteParkingFloor: async (floor: number): Promise<{ floor: number; removedSpots: number }> => {
+    const floorSpots = parkingSpotsDb.filter((spot) => spot.floor === floor);
+    if (floorSpots.length === 0) {
+      throw new Error("Piso nao encontrado");
+    }
+
+    if (floorSpots.some((spot) => spot.vehicleId)) {
+      throw new Error("Nao e possivel excluir um piso com veiculos vinculados");
+    }
+
+    for (let index = parkingSpotsDb.length - 1; index >= 0; index -= 1) {
+      if (parkingSpotsDb[index].floor === floor) {
+        parkingSpotsDb.splice(index, 1);
+      }
+    }
+
+    createActivity({
+      id: createId("act"),
+      type: "alert",
+      title: "Piso Excluido",
+      description: `Piso ${floor} removido do mapa do patio`,
+      time: "agora",
+    });
+
+    return simulateNetwork({ floor, removedSpots: floorSpots.length });
+  },
+
+  deleteParkingSpot: async (spotId: string): Promise<{ spotId: string; code: string }> => {
+    const spotIndex = parkingSpotsDb.findIndex((item) => item.id === spotId);
+    if (spotIndex === -1) {
+      throw new Error("Vaga nao encontrada");
+    }
+
+    const spot = parkingSpotsDb[spotIndex];
+    if (spot.vehicleId || spot.status === "occupied") {
+      throw new Error("Nao e possivel excluir uma vaga ocupada");
+    }
+
+    parkingSpotsDb.splice(spotIndex, 1);
+    sortSpotsInSection(
+      parkingSpotsDb.filter(
+        (item) => item.floor === spot.floor && normalizeSection(item.section) === normalizeSection(spot.section),
+      ),
+    );
+
+    createActivity({
+      id: createId("act"),
+      type: "alert",
+      title: "Vaga Excluida",
+      description: `${spot.code} removida do mapa do patio`,
+      time: "agora",
+    });
+
+    return simulateNetwork({ spotId, code: spot.code });
   },
 
   updateParkingSpotConfig: async (input: UpdateParkingSpotConfigInput): Promise<ParkingSpot> => {
@@ -569,8 +706,6 @@ export const valetApi = {
       section: spot.section,
       type: spot.type,
       status: spot.status,
-      usageRule: spot.usageRule,
-      capacity: spot.capacity,
       observations: spot.observations,
     };
 
@@ -591,8 +726,6 @@ export const valetApi = {
     spot.section = section;
     spot.status = input.status;
     spot.type = input.type;
-    spot.usageRule = input.usageRule?.trim() || "Operacao geral";
-    spot.capacity = Math.max(1, input.capacity ?? 1);
     spot.observations = input.observations?.trim() || undefined;
 
     appendSpotHistory(

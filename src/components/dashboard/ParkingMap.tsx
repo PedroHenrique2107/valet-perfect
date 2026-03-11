@@ -8,7 +8,22 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { sortSectionsByOrder } from "@/lib/parkingLayout";
 import { cn } from "@/lib/utils";
 import type { ParkingSpot } from "@/types/valet";
 
@@ -20,6 +35,13 @@ interface ParkingMapProps {
   selectedSpotId?: string;
   onSpotSelect?: (spot: ParkingSpot) => void;
   onSpotMove?: (spot: ParkingSpot, target: Pick<ParkingSpot, "floor" | "section">) => void;
+  onSpotEdit?: (spot: ParkingSpot) => void;
+  onSpotStatus?: (spot: ParkingSpot) => void;
+  onSpotDelete?: (spot: ParkingSpot) => void;
+  floorFilterValue?: string;
+  floorOptions?: number[];
+  onFloorFilterChange?: (value: string) => void;
+  sectionOrder?: string[];
 }
 
 const spotTypeIcons = {
@@ -73,6 +95,11 @@ function getSpotClasses(spot: ParkingSpot) {
   return "bg-success/15 border-success/70 text-success";
 }
 
+function getSpotShortCode(code: string) {
+  const segments = code.split("-");
+  return segments[segments.length - 1] ?? code;
+}
+
 export function ParkingMap({
   spots,
   className,
@@ -81,6 +108,13 @@ export function ParkingMap({
   selectedSpotId,
   onSpotSelect,
   onSpotMove,
+  onSpotEdit,
+  onSpotStatus,
+  onSpotDelete,
+  floorFilterValue = "all",
+  floorOptions = [],
+  onFloorFilterChange,
+  sectionOrder = [],
 }: ParkingMapProps) {
   const [draggedSpotId, setDraggedSpotId] = useState<string | null>(null);
   const grouped = useMemo(() => {
@@ -108,9 +142,28 @@ export function ParkingMap({
   return (
     <div className={cn("stat-card", className)}>
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h3 className="font-semibold text-foreground">{title}</h3>
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        <div className="space-y-3">
+          <div>
+            <h3 className="font-semibold text-foreground">{title}</h3>
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
+          </div>
+          {onFloorFilterChange ? (
+            <div className="w-full max-w-xs">
+              <Select value={floorFilterValue} onValueChange={onFloorFilterChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os pisos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os pisos</SelectItem>
+                  {floorOptions.map((floor) => (
+                    <SelectItem key={floor} value={String(floor)}>
+                      Piso {floor}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-4 text-xs">
@@ -136,7 +189,10 @@ export function ParkingMap({
               </div>
 
               {Object.entries(sections)
-                .sort(([left], [right]) => left.localeCompare(right))
+                .sort(([left], [right]) => {
+                  const sorted = sortSectionsByOrder([left, right], sectionOrder);
+                  return sorted.indexOf(left) - sorted.indexOf(right);
+                })
                 .map(([section, sectionSpots]) => (
                   <div
                     key={`${floor}-${section}`}
@@ -166,35 +222,54 @@ export function ParkingMap({
 
                           return (
                             <Tooltip key={spot.id}>
-                              <TooltipTrigger asChild>
-                                <button
-                                type="button"
-                                  draggable={Boolean(onSpotMove)}
-                                  onDragStart={() => {
-                                    if (!onSpotMove) return;
-                                    setDraggedSpotId(spot.id);
-                                  }}
-                                  onDragEnd={() => setDraggedSpotId(null)}
-                                  className={cn(
-                                    "relative flex aspect-[1.2/1] flex-col items-center justify-center gap-1 rounded-2xl border p-2 text-center transition-all duration-200 hover:scale-[1.02]",
-                                    onSpotMove ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
-                                    getSpotClasses(spot),
-                                    isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
-                                  )}
-                                  onClick={() => onSpotSelect?.(spot)}
-                                >
-                                  <Icon className="h-5 w-5" />
-                                  <span className="font-mono text-sm font-semibold">
-                                    {spot.code.split("-")[1] ?? spot.code}
-                                  </span>
-                                  {spot.status === "maintenance" && (
-                                    <Wrench className="absolute -right-1 -top-1 h-3.5 w-3.5 text-warning" />
-                                  )}
-                                  {spot.status === "blocked" && (
-                                    <Lock className="absolute -right-1 -top-1 h-3.5 w-3.5 text-slate-300" />
-                                  )}
-                                </button>
-                              </TooltipTrigger>
+                              <ContextMenu>
+                                <ContextMenuTrigger asChild>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      draggable={Boolean(onSpotMove)}
+                                      onDragStart={() => {
+                                        if (!onSpotMove) return;
+                                        setDraggedSpotId(spot.id);
+                                      }}
+                                      onDragEnd={() => setDraggedSpotId(null)}
+                                      className={cn(
+                                        "relative flex aspect-[1.2/1] flex-col items-center justify-center gap-1 rounded-2xl border p-2 text-center transition-all duration-200 hover:scale-[1.02]",
+                                        onSpotMove ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+                                        getSpotClasses(spot),
+                                        isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+                                      )}
+                                      onClick={() => onSpotSelect?.(spot)}
+                                    >
+                                      <Icon className="h-5 w-5" />
+                                      <span className="font-mono text-sm font-semibold">
+                                        {getSpotShortCode(spot.code)}
+                                      </span>
+                                      {spot.status === "maintenance" && (
+                                        <Wrench className="absolute -right-1 -top-1 h-3.5 w-3.5 text-warning" />
+                                      )}
+                                      {spot.status === "blocked" && (
+                                        <Lock className="absolute -right-1 -top-1 h-3.5 w-3.5 text-slate-300" />
+                                      )}
+                                    </button>
+                                  </TooltipTrigger>
+                                </ContextMenuTrigger>
+                                <ContextMenuContent className="w-40">
+                                  <ContextMenuItem onClick={() => onSpotEdit?.(spot)}>
+                                    Editar vaga
+                                  </ContextMenuItem>
+                                  <ContextMenuItem onClick={() => onSpotStatus?.(spot)}>
+                                    Status
+                                  </ContextMenuItem>
+                                  <ContextMenuSeparator />
+                                  <ContextMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => onSpotDelete?.(spot)}
+                                  >
+                                    Excluir vaga
+                                  </ContextMenuItem>
+                                </ContextMenuContent>
+                              </ContextMenu>
                               <TooltipContent side="top">
                                 <div className="text-sm">
                                   <p className="font-semibold">{spot.code}</p>
@@ -202,7 +277,6 @@ export function ParkingMap({
                                     Piso {spot.floor} • Secao {spot.section}
                                   </p>
                                   <p className="text-muted-foreground">{typeLabels[spot.type]}</p>
-                                  <p className="text-muted-foreground">{spot.usageRule ?? "Operacao geral"}</p>
                                   <p className="font-medium">{statusLabels[spot.status]}</p>
                                 </div>
                               </TooltipContent>

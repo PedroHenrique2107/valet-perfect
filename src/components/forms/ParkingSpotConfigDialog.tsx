@@ -33,8 +33,6 @@ const schema = z.object({
   section: z.string().min(1, "Informe a secao"),
   type: z.enum(["regular", "vip", "accessible", "electric", "motorcycle"]),
   status: z.enum(["available", "maintenance", "blocked", "occupied"]),
-  usageRule: z.string().min(2, "Informe a regra de uso"),
-  capacity: z.coerce.number().min(1, "Capacidade minima 1").max(10, "Capacidade maxima 10"),
   observations: z.string().optional(),
 });
 
@@ -45,6 +43,8 @@ interface ParkingSpotConfigDialogProps {
   onOpenChange: (open: boolean) => void;
   spot: ParkingSpot | null;
   mode?: "create" | "edit";
+  floorOptions: number[];
+  sectionsByFloor: Record<number, string[]>;
 }
 
 const typeLabels: Record<ParkingSpot["type"], string> = {
@@ -67,6 +67,8 @@ export function ParkingSpotConfigDialog({
   onOpenChange,
   spot,
   mode = "edit",
+  floorOptions,
+  sectionsByFloor,
 }: ParkingSpotConfigDialogProps) {
   const updateParkingSpot = useUpdateParkingSpotConfigMutation();
   const createParkingSpot = useCreateParkingSpotMutation();
@@ -75,12 +77,10 @@ export function ParkingSpotConfigDialog({
     resolver: zodResolver(schema),
     defaultValues: {
       code: "",
-      floor: 1,
-      section: "A",
+      floor: floorOptions[0] ?? 1,
+      section: sectionsByFloor[floorOptions[0] ?? 1]?.[0] ?? "",
       type: "regular",
       status: "available",
-      usageRule: "Operacao geral",
-      capacity: 1,
       observations: "",
     },
   });
@@ -91,12 +91,10 @@ export function ParkingSpotConfigDialog({
     if (isCreate) {
       form.reset({
         code: "",
-        floor: 1,
-        section: "A",
+        floor: floorOptions[0] ?? 1,
+        section: sectionsByFloor[floorOptions[0] ?? 1]?.[0] ?? "",
         type: "regular",
         status: "available",
-        usageRule: "Operacao geral",
-        capacity: 1,
         observations: "",
       });
       return;
@@ -109,11 +107,20 @@ export function ParkingSpotConfigDialog({
       section: spot.section,
       type: spot.type,
       status: spot.status,
-      usageRule: spot.usageRule ?? "Operacao geral",
-      capacity: spot.capacity ?? 1,
       observations: spot.observations ?? "",
     });
-  }, [form, isCreate, spot]);
+  }, [floorOptions, form, isCreate, sectionsByFloor, spot]);
+
+  const selectedFloor = form.watch("floor");
+  const availableSections = sectionsByFloor[selectedFloor] ?? [];
+
+  useEffect(() => {
+    if (!open) return;
+    const currentSection = form.getValues("section");
+    if (!availableSections.includes(currentSection)) {
+      form.setValue("section", availableSections[0] ?? "", { shouldValidate: true });
+    }
+  }, [availableSections, form, open, selectedFloor]);
 
   const allowedStatuses = useMemo(() => {
     if (spot?.vehicleId) {
@@ -130,8 +137,6 @@ export function ParkingSpotConfigDialog({
         section: values.section,
         type: values.type,
         status: values.status === "occupied" ? "available" : values.status,
-        usageRule: values.usageRule,
-        capacity: values.capacity,
         observations: values.observations,
       });
       toast({
@@ -150,8 +155,6 @@ export function ParkingSpotConfigDialog({
       section: values.section,
       type: values.type,
       status: values.status,
-      usageRule: values.usageRule,
-      capacity: values.capacity,
       observations: values.observations,
     });
 
@@ -169,7 +172,7 @@ export function ParkingSpotConfigDialog({
           <DialogTitle>{isCreate ? "Nova vaga" : `Editar vaga ${spot?.code ?? ""}`}</DialogTitle>
           <DialogDescription>
             {isCreate
-              ? "Cadastre uma nova vaga com regras de uso e configuracao operacional."
+              ? "Cadastre uma nova vaga escolhendo um piso e uma secao ja existentes."
               : "Renomeie, mova e ajuste a vaga selecionada."}
           </DialogDescription>
         </DialogHeader>
@@ -183,17 +186,41 @@ export function ParkingSpotConfigDialog({
 
             <div className="space-y-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Piso</p>
-              <Input type="number" min={1} {...form.register("floor")} />
+              <Select
+                value={String(selectedFloor)}
+                onValueChange={(value) => form.setValue("floor", Number(value), { shouldValidate: true })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o piso" />
+                </SelectTrigger>
+                <SelectContent>
+                  {floorOptions.map((floor) => (
+                    <SelectItem key={floor} value={String(floor)}>
+                      Piso {floor}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Secao</p>
-              <Input {...form.register("section")} placeholder="Ex.: A, VIP, D" />
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Capacidade</p>
-              <Input type="number" min={1} max={10} {...form.register("capacity")} />
+              <Select
+                value={form.watch("section")}
+                onValueChange={(value) => form.setValue("section", value, { shouldValidate: true })}
+                disabled={availableSections.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a secao" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableSections.map((section) => (
+                    <SelectItem key={section} value={section}>
+                      Secao {section}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -241,15 +268,10 @@ export function ParkingSpotConfigDialog({
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Regra de uso</p>
-            <Input {...form.register("usageRule")} placeholder="Ex.: Credenciado, carga e descarga, operacao geral" />
-          </div>
-
-          <div className="space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Observacoes operacionais</p>
             <Textarea
               {...form.register("observations")}
-              placeholder="Informacoes adicionais, restricoes, observacoes de manutencao ou uso da vaga"
+              placeholder="Informacoes adicionais, restricoes ou observacoes de manutencao"
               rows={4}
             />
           </div>
