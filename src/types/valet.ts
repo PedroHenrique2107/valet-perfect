@@ -84,13 +84,29 @@ export interface Attendant {
   accumulatedWorkMinutes: number;
 }
 
+export type ParkingSpotStatus = 'available' | 'occupied' | 'maintenance' | 'blocked';
+export type ParkingSpotType = 'regular' | 'vip' | 'accessible' | 'electric' | 'motorcycle';
+
+export interface ParkingSpotHistoryEntry {
+  id: string;
+  action: string;
+  details: string;
+  changedAt: Date;
+  changedBy: string;
+}
+
 export interface ParkingSpot {
   id: string;
   code: string;
   floor: number;
   section: string;
-  type: 'regular' | 'vip' | 'accessible' | 'electric' | 'motorcycle';
-  status: 'available' | 'occupied' | 'reserved' | 'maintenance';
+  type: ParkingSpotType;
+  status: ParkingSpotStatus;
+  usageRule?: string;
+  capacity?: number;
+  observations?: string;
+  sortOrder?: number;
+  history?: ParkingSpotHistoryEntry[];
   vehicleId?: string;
 }
 

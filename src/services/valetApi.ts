@@ -26,6 +26,7 @@ import type { // Types and interfaces
   DashboardStats,
   OccupancyData,
   ParkingSpot,
+  ParkingSpotHistoryEntry,
   RevenueData,
   Transaction,
   Vehicle,
@@ -61,6 +62,39 @@ export interface RegisterExitInput {
 export interface UpdateVehicleSpotInput { 
   vehicleId: string; // ID do veículo que terá a vaga atualizada
   spotId: string; // ID da nova vaga onde o veículo será movido
+}
+
+// Tipo de entrada para atualizar a configuração operacional de uma vaga
+export interface UpdateParkingSpotConfigInput {
+  spotId: string; // ID interno da vaga
+  status: ParkingSpot["status"]; // Novo status operacional da vaga
+  type: ParkingSpot["type"]; // Novo tipo da vaga
+  code: string; // Codigo visivel da vaga
+  floor: number; // Piso da vaga
+  section: string; // Secao da vaga
+  usageRule?: string; // Regra operacional da vaga
+  capacity?: number; // Capacidade configurada
+  observations?: string; // Observacoes operacionais
+}
+
+// Tipo de entrada para criar uma nova vaga
+export interface CreateParkingSpotInput {
+  code: string;
+  floor: number;
+  section: string;
+  type: ParkingSpot["type"];
+  status: Exclude<ParkingSpot["status"], "occupied">;
+  usageRule?: string;
+  capacity?: number;
+  observations?: string;
+}
+
+// Tipo de entrada para movimentar uma vaga entre piso/secoes com drag and drop
+export interface MoveParkingSpotInput {
+  spotId: string;
+  floor: number;
+  section: string;
+  sortOrder?: number;
 }
 
 // Tipo de entrada para atribuir uma tarefa de movimentação a um manobrista
@@ -117,6 +151,47 @@ function createActivity(activity: Activity) {
   activitiesDb.unshift(activity);
 }
 
+function appendSpotHistory(
+  spot: ParkingSpot,
+  action: string,
+  details: string,
+  changedBy: string = "Supervisor",
+) {
+  const entry: ParkingSpotHistoryEntry = {
+    id: createId("spot_hist"),
+    action,
+    details,
+    changedAt: new Date(),
+    changedBy,
+  };
+  spot.history = [entry, ...(spot.history ?? [])];
+}
+
+function normalizeSpotCode(code: string): string {
+  return code.trim().toUpperCase();
+}
+
+function normalizeSection(section: string): string {
+  return section.trim().toUpperCase();
+}
+
+function ensureUniqueSpotCode(code: string, currentSpotId?: string) {
+  const duplicated = parkingSpotsDb.find(
+    (spot) => spot.id !== currentSpotId && normalizeSpotCode(spot.code) === code,
+  );
+  if (duplicated) {
+    throw new Error("Ja existe uma vaga com este codigo");
+  }
+}
+
+function sortSpotsInSection(spots: ParkingSpot[]) {
+  spots
+    .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
+    .forEach((spot, index) => {
+      spot.sortOrder = index + 1;
+    });
+}
+
 // Função para calcular e retornar um snapshot dos principais indicadores do dashboard, como número total de veículos, vagas disponíveis, taxa de ocupação, receita do dia, duração média de estadia, número de manobristas ativos, veículos aguardando e tempo médio de espera
 function getDashboardStatsSnapshot(): DashboardStats {
   const activeVehicles = vehiclesDb.filter((vehicle) => vehicle.status !== "delivered"); // Considera veículos em qualquer status exceto "delivered" como ativos
@@ -166,7 +241,14 @@ function getDashboardStatsSnapshot(): DashboardStats {
 export const valetApi = {
   getVehicles: (): Promise<Vehicle[]> => simulateNetwork([...vehiclesDb]),
   getAttendants: (): Promise<Attendant[]> => simulateNetwork([...attendantsDb]),
-  getParkingSpots: (): Promise<ParkingSpot[]> => simulateNetwork([...parkingSpotsDb]),
+  getParkingSpots: (): Promise<ParkingSpot[]> =>
+    simulateNetwork(
+      [...parkingSpotsDb].sort((left, right) => {
+        if (left.floor !== right.floor) return left.floor - right.floor;
+        if (left.section !== right.section) return left.section.localeCompare(right.section);
+        return (left.sortOrder ?? 0) - (right.sortOrder ?? 0);
+      }),
+    ),
   getTransactions: (): Promise<Transaction[]> => simulateNetwork([...transactionsDb]),
   getRevenueData: (): Promise<RevenueData[]> => simulateNetwork([...revenueDataDb]),
   getOccupancyData: (): Promise<OccupancyData[]> => simulateNetwork([...occupancyDataDb]),
@@ -201,7 +283,7 @@ export const valetApi = {
         delete spot.vehicleId;
       }
       // Se a vaga estava ocupada ou reservada, reseta para disponível, já que o veículo foi removido
-      if (spot.status === "occupied" || spot.status === "reserved") {
+      if (spot.status === "occupied") {
         spot.status = "available"; 
       }
     });
@@ -421,6 +503,157 @@ export const valetApi = {
     });
 
     return simulateNetwork(vehicle);
+  },
+
+  // Atualiza a configuração operacional de uma vaga sem alterar o fluxo de entrada/saída de veículos.
+  createParkingSpot: async (input: CreateParkingSpotInput): Promise<ParkingSpot> => {
+    const code = normalizeSpotCode(input.code);
+    const section = normalizeSection(input.section);
+    ensureUniqueSpotCode(code);
+
+    if (input.floor < 1) {
+      throw new Error("O piso deve ser maior ou igual a 1");
+    }
+
+    const sectionSpots = parkingSpotsDb.filter(
+      (spot) => spot.floor === input.floor && normalizeSection(spot.section) === section,
+    );
+
+    const newSpot: ParkingSpot = {
+      id: createId("spot"),
+      code,
+      floor: input.floor,
+      section,
+      type: input.type,
+      status: input.status,
+      usageRule: input.usageRule?.trim() || "Operacao geral",
+      capacity: Math.max(1, input.capacity ?? 1),
+      observations: input.observations?.trim() || undefined,
+      sortOrder: sectionSpots.length + 1,
+      history: [],
+    };
+
+    appendSpotHistory(newSpot, "created", "Vaga criada");
+    parkingSpotsDb.push(newSpot);
+    createActivity({
+      id: createId("act"),
+      type: "entry",
+      title: "Nova Vaga Criada",
+      description: `${newSpot.code} adicionada ao piso ${newSpot.floor}`,
+      time: "agora",
+    });
+    return simulateNetwork(newSpot);
+  },
+
+  updateParkingSpotConfig: async (input: UpdateParkingSpotConfigInput): Promise<ParkingSpot> => {
+    const spot = parkingSpotsDb.find((item) => item.id === input.spotId);
+    if (!spot) {
+      throw new Error("Vaga nao encontrada");
+    }
+
+    const code = normalizeSpotCode(input.code);
+    const section = normalizeSection(input.section);
+    ensureUniqueSpotCode(code, spot.id);
+
+    if (input.status === "occupied" && !spot.vehicleId) {
+      throw new Error("Nao e permitido marcar uma vaga livre como ocupada manualmente");
+    }
+
+    if (spot.vehicleId && input.status !== "occupied") {
+      throw new Error("Nao e possivel alterar o status de uma vaga com veiculo vinculado");
+    }
+
+    const previousSnapshot = {
+      code: spot.code,
+      floor: spot.floor,
+      section: spot.section,
+      type: spot.type,
+      status: spot.status,
+      usageRule: spot.usageRule,
+      capacity: spot.capacity,
+      observations: spot.observations,
+    };
+
+    const sectionChanged = spot.floor !== input.floor || normalizeSection(spot.section) !== section;
+    if (sectionChanged) {
+      const previousSectionSpots = parkingSpotsDb.filter(
+        (item) => item.id !== spot.id && item.floor === spot.floor && normalizeSection(item.section) === normalizeSection(spot.section),
+      );
+      sortSpotsInSection(previousSectionSpots);
+      const targetSectionSpots = parkingSpotsDb.filter(
+        (item) => item.id !== spot.id && item.floor === input.floor && normalizeSection(item.section) === section,
+      );
+      spot.sortOrder = targetSectionSpots.length + 1;
+    }
+
+    spot.code = code;
+    spot.floor = input.floor;
+    spot.section = section;
+    spot.status = input.status;
+    spot.type = input.type;
+    spot.usageRule = input.usageRule?.trim() || "Operacao geral";
+    spot.capacity = Math.max(1, input.capacity ?? 1);
+    spot.observations = input.observations?.trim() || undefined;
+
+    appendSpotHistory(
+      spot,
+      "updated",
+      `Codigo ${previousSnapshot.code} -> ${spot.code}; piso ${previousSnapshot.floor} -> ${spot.floor}; secao ${previousSnapshot.section} -> ${spot.section}; tipo ${previousSnapshot.type} -> ${spot.type}; status ${previousSnapshot.status} -> ${spot.status}`,
+    );
+
+    createActivity({
+      id: createId("act"),
+      type: "alert",
+      title: "Configuracao de Vaga Atualizada",
+      description: `${spot.code} atualizada no mapa do patio`,
+      time: "agora",
+    });
+
+    return simulateNetwork(spot);
+  },
+
+  moveParkingSpot: async (input: MoveParkingSpotInput): Promise<ParkingSpot> => {
+    const spot = parkingSpotsDb.find((item) => item.id === input.spotId);
+    if (!spot) {
+      throw new Error("Vaga nao encontrada");
+    }
+
+    const previousFloor = spot.floor;
+    const previousSection = spot.section;
+    const nextSection = normalizeSection(input.section);
+
+    if (previousFloor === input.floor && normalizeSection(previousSection) === nextSection) {
+      return simulateNetwork(spot);
+    }
+
+    const previousSectionSpots = parkingSpotsDb.filter(
+      (item) => item.id !== spot.id && item.floor === previousFloor && normalizeSection(item.section) === normalizeSection(previousSection),
+    );
+    sortSpotsInSection(previousSectionSpots);
+
+    const targetSectionSpots = parkingSpotsDb.filter(
+      (item) => item.id !== spot.id && item.floor === input.floor && normalizeSection(item.section) === nextSection,
+    );
+
+    spot.floor = input.floor;
+    spot.section = nextSection;
+    spot.sortOrder = input.sortOrder ?? targetSectionSpots.length + 1;
+
+    appendSpotHistory(
+      spot,
+      "moved",
+      `Vaga movida de piso ${previousFloor} secao ${previousSection} para piso ${spot.floor} secao ${spot.section}`,
+    );
+
+    createActivity({
+      id: createId("act"),
+      type: "alert",
+      title: "Vaga Movida",
+      description: `${spot.code} movida para piso ${spot.floor} / secao ${spot.section}`,
+      time: "agora",
+    });
+
+    return simulateNetwork(spot);
   },
 
   // Registra a saída de um veículo, atualizando seu status para "delivered", registrando a hora de saída, liberando a vaga associada, atualizando as estatísticas do manobrista responsável, criando uma transação de pagamento para a estadia do veículo, e registrando uma atividade de saída para monitoramento e histórico do sistema. Retorna o veículo atualizado após simular a latência de rede.

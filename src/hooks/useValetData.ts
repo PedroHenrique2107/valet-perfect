@@ -2,10 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   valetApi,
   type AssignTaskInput,
+  type CreateParkingSpotInput,
   type CreateAttendantInput,
   type CreateClientInput,
   type CreateVehicleInput,
+  type MoveParkingSpotInput,
   type RegisterExitInput,
+  type UpdateParkingSpotConfigInput,
   type UpdateVehicleSpotInput,
 } from "@/services/valetApi";
 
@@ -177,6 +180,30 @@ export function useUpdateVehicleSpotMutation() {
   const invalidate = useInvalidateCoreQueries();
   return useMutation({
     mutationFn: (input: UpdateVehicleSpotInput) => valetApi.updateVehicleSpot(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCreateParkingSpotMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: CreateParkingSpotInput) => valetApi.createParkingSpot(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateParkingSpotConfigMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: UpdateParkingSpotConfigInput) => valetApi.updateParkingSpotConfig(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useMoveParkingSpotMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: MoveParkingSpotInput) => valetApi.moveParkingSpot(input),
     onSuccess: invalidate,
   });
 }
