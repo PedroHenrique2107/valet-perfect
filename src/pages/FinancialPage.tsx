@@ -1,5 +1,7 @@
 import {
+  ArrowRightLeft,
   Calendar,
+  CircleHelp,
   CreditCard,
   DollarSign,
   Download,
@@ -9,7 +11,6 @@ import {
 import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { useNavigate } from "react-router-dom";
-import ExcelJS from "exceljs";
 import {
   differenceInCalendarDays,
   eachDayOfInterval,
@@ -26,11 +27,13 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
+import { VehicleMovementChart } from "@/components/dashboard/VehicleMovementChart";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar as DatePickerCalendar } from "@/components/ui/calendar";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
@@ -45,7 +48,7 @@ import {
   useVehiclesQuery,
 } from "@/hooks/useValetData";
 import { formatCurrencyBRL, formatDateTimeBR, formatDurationMinutes } from "@/lib/format";
-import type { PaymentMethod, PaymentStatus, RevenueData, Transaction } from "@/types/valet";
+import type { PaymentMethod, PaymentStatus, RevenueData, Transaction, Vehicle } from "@/types/valet";
 
 type PeriodPreset = "today" | "7d" | "1m" | "6m" | "1y" | "custom";
 type PaymentFilter = PaymentMethod | "all";
@@ -177,7 +180,22 @@ function buildRevenueChartData(
   end: Date,
 ): RevenueData[] {
   const spanInDays = differenceInCalendarDays(end, start) + 1;
+  const isSingleDay = spanInDays === 1;
   const useMonthlyBuckets = spanInDays > 62;
+
+  if (isSingleDay) {
+    return Array.from({ length: 24 }, (_, hour) => {
+      const hourTransactions = transactions.filter(
+        (transaction) => transaction.createdAt.getHours() === hour,
+      );
+
+      return {
+        date: `${String(hour).padStart(2, "0")}:00`,
+        revenue: hourTransactions.reduce((acc, transaction) => acc + transaction.amount, 0),
+        transactions: hourTransactions.length,
+      };
+    });
+  }
 
   if (useMonthlyBuckets) {
     return eachMonthOfInterval({ start, end }).map((monthDate) => {
@@ -206,6 +224,58 @@ function buildRevenueChartData(
       transactions: dayTransactions.length,
     };
   });
+}
+
+function buildVehicleMovementData(vehicles: Vehicle[], start: Date, end: Date) {
+  const spanInDays = differenceInCalendarDays(end, start) + 1;
+  const isSingleDay = spanInDays === 1;
+  const useMonthlyBuckets = spanInDays > 62;
+
+  if (isSingleDay) {
+    return Array.from({ length: 24 }, (_, hour) => ({
+      label: `${String(hour).padStart(2, "0")}:00`,
+      entries: vehicles.filter(
+        (vehicle) =>
+          isWithinInterval(vehicle.entryTime, { start, end }) && vehicle.entryTime.getHours() === hour,
+      ).length,
+      exits: vehicles.filter(
+        (vehicle) =>
+          vehicle.exitTime &&
+          isWithinInterval(vehicle.exitTime, { start, end }) &&
+          vehicle.exitTime.getHours() === hour,
+      ).length,
+    }));
+  }
+
+  if (useMonthlyBuckets) {
+    return eachMonthOfInterval({ start, end }).map((monthDate) => {
+      const monthStart = startOfMonth(monthDate);
+      const monthEnd = endOfMonth(monthDate);
+      return {
+        label: format(monthDate, "MMM/yy", { locale: ptBR }),
+        entries: vehicles.filter((vehicle) =>
+          isWithinInterval(vehicle.entryTime, { start: monthStart, end: monthEnd }),
+        ).length,
+        exits: vehicles.filter(
+          (vehicle) =>
+            vehicle.exitTime &&
+            isWithinInterval(vehicle.exitTime, { start: monthStart, end: monthEnd }),
+        ).length,
+      };
+    });
+  }
+
+  return eachDayOfInterval({ start, end }).map((dayDate) => ({
+    label: format(dayDate, "dd/MM"),
+    entries: vehicles.filter((vehicle) =>
+      isWithinInterval(vehicle.entryTime, { start: startOfDay(dayDate), end: endOfDay(dayDate) }),
+    ).length,
+    exits: vehicles.filter(
+      (vehicle) =>
+        vehicle.exitTime &&
+        isWithinInterval(vehicle.exitTime, { start: startOfDay(dayDate), end: endOfDay(dayDate) }),
+    ).length,
+  }));
 }
 
 function createLogoBase64() {
@@ -247,7 +317,10 @@ function createLogoBase64() {
   return canvas.toDataURL("image/png");
 }
 
-async function downloadWorkbook(workbook: ExcelJS.Workbook, filename: string) {
+async function downloadWorkbook(
+  workbook: { xlsx: { writeBuffer: () => Promise<ArrayBuffer> } },
+  filename: string,
+) {
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -268,6 +341,8 @@ export default function FinancialPage() {
 
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodPreset>("7d");
   const [periodPopoverOpen, setPeriodPopoverOpen] = useState(false);
+  const [showComparisonGuide, setShowComparisonGuide] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [customRange, setCustomRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 6),
     to: new Date(),
@@ -371,74 +446,83 @@ export default function FinancialPage() {
     () => buildRevenueChartData(completedTransactions, activeRange.start, activeRange.end),
     [activeRange.end, activeRange.start, completedTransactions],
   );
+  const movementData = useMemo(
+    () => buildVehicleMovementData(vehicles, activeRange.start, activeRange.end),
+    [activeRange.end, activeRange.start, vehicles],
+  );
 
   const periodLabel = getPeriodLabel(selectedPeriod, customRange);
   const rangeLabel = `${format(activeRange.start, "dd/MM/yyyy")} - ${format(activeRange.end, "dd/MM/yyyy")}`;
   const previousRangeLabel = `${format(previousRange.start, "dd/MM/yyyy")} - ${format(previousRange.end, "dd/MM/yyyy")}`;
+  const comparisonDescription = `Para comparar ${periodLabel.toLowerCase()}, usamos o bloco imediatamente anterior com a mesma duracao.`;
 
   const handleExport = async () => {
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Codex";
-    workbook.company = "ValetTracker";
-    workbook.created = new Date();
-    workbook.modified = new Date();
+    setIsExporting(true);
+    try {
+      const excelJsModule = await import("exceljs");
+      const ExcelJS = excelJsModule.default;
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Codex";
+      workbook.company = "ValetTracker";
+      workbook.created = new Date();
+      workbook.modified = new Date();
 
-    const summarySheet = workbook.addWorksheet("Resumo Executivo", {
-      views: [{ state: "frozen", ySplit: 7 }],
-    });
-    summarySheet.properties.defaultRowHeight = 22;
-    summarySheet.columns = [
-      { key: "a", width: 24 },
-      { key: "b", width: 24 },
-      { key: "c", width: 20 },
-      { key: "d", width: 20 },
-      { key: "e", width: 20 },
-      { key: "f", width: 16 },
-      { key: "g", width: 16 },
-      { key: "h", width: 18 },
-    ];
+      const summarySheet = workbook.addWorksheet("Resumo Executivo", {
+        views: [{ state: "frozen", ySplit: 7 }],
+      });
+      summarySheet.properties.defaultRowHeight = 22;
+      summarySheet.columns = [
+        { key: "a", width: 24 },
+        { key: "b", width: 24 },
+        { key: "c", width: 20 },
+        { key: "d", width: 20 },
+        { key: "e", width: 20 },
+        { key: "f", width: 16 },
+        { key: "g", width: 16 },
+        { key: "h", width: 18 },
+      ];
 
-    summarySheet.mergeCells("B1:H3");
-    const titleCell = summarySheet.getCell("B1");
-    titleCell.value = "Relatorio Financeiro Executivo";
-    titleCell.font = { size: 22, bold: true, color: { argb: "FFFFFFFF" } };
-    titleCell.alignment = { vertical: "middle", horizontal: "left" };
-    titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
+      summarySheet.mergeCells("B1:H3");
+      const titleCell = summarySheet.getCell("B1");
+      titleCell.value = "Relatorio Financeiro Executivo";
+      titleCell.font = { size: 22, bold: true, color: { argb: "FFFFFFFF" } };
+      titleCell.alignment = { vertical: "middle", horizontal: "left" };
+      titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
 
-    const subtitleCell = summarySheet.getCell("B3");
-    subtitleCell.value = `Periodo: ${periodLabel}  |  Filtros: ${paymentOptions.find((item) => item.value === paymentFilter)?.label}, ${statusOptions.find((item) => item.value === statusFilter)?.label}`;
-    subtitleCell.font = { size: 11, color: { argb: "FFE2E8F0" } };
-    subtitleCell.alignment = { vertical: "middle", horizontal: "left" };
-    subtitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
+      const subtitleCell = summarySheet.getCell("B3");
+      subtitleCell.value = `Periodo: ${periodLabel}  |  Filtros: ${paymentOptions.find((item) => item.value === paymentFilter)?.label}, ${statusOptions.find((item) => item.value === statusFilter)?.label}`;
+      subtitleCell.font = { size: 11, color: { argb: "FFE2E8F0" } };
+      subtitleCell.alignment = { vertical: "middle", horizontal: "left" };
+      subtitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
 
-    const logo = createLogoBase64();
-    if (logo) {
-      const imageId = workbook.addImage({ base64: logo, extension: "png" });
-      summarySheet.addImage(imageId, "A1:A3");
-    }
+      const logo = createLogoBase64();
+      if (logo) {
+        const imageId = workbook.addImage({ base64: logo, extension: "png" });
+        summarySheet.addImage(imageId, "A1:A3");
+      }
 
-    summarySheet.getRow(5).values = [
-      "Intervalo atual",
-      rangeLabel,
-      "Periodo anterior",
-      previousRangeLabel,
-      "Gerado em",
-      formatDateTimeBR(new Date()),
-    ];
-    summarySheet.getRow(5).font = { bold: true, color: { argb: "FF0F172A" } };
+      summarySheet.getRow(5).values = [
+        "Intervalo atual",
+        rangeLabel,
+        "Periodo anterior",
+        previousRangeLabel,
+        "Gerado em",
+        formatDateTimeBR(new Date()),
+      ];
+      summarySheet.getRow(5).font = { bold: true, color: { argb: "FF0F172A" } };
 
-    summarySheet.getRow(7).values = ["Indicador", "Atual", "Anterior", "Variacao"];
-    summarySheet.getRow(7).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    summarySheet.getRow(7).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
+      summarySheet.getRow(7).values = ["Indicador", "Atual", "Anterior", "Variacao"];
+      summarySheet.getRow(7).font = { bold: true, color: { argb: "FFFFFFFF" } };
+      summarySheet.getRow(7).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
 
-    const summaryRows = [
-      ["Receita", periodRevenue, previousRevenue, `${revenueTrend.isPositive ? "+" : "-"}${revenueTrend.value}%`],
-      ["Transacoes concluidas", completedCount, previousCompletedCount, `${completedTrend.isPositive ? "+" : "-"}${completedTrend.value}%`],
-      ["Ticket medio", avgTicket, previousAvgTicket, `${avgTicketTrend.isPositive ? "+" : "-"}${avgTicketTrend.value}%`],
-      ["Transacoes pendentes", pendingTransactions.length, previousPendingTransactions.length, `${pendingTrend.isPositive ? "+" : "-"}${pendingTrend.value}%`],
-    ];
-    summaryRows.forEach((row, index) => {
-      const excelRow = summarySheet.getRow(index + 8);
+      const summaryRows = [
+        ["Receita", periodRevenue, previousRevenue, `${revenueTrend.isPositive ? "+" : "-"}${revenueTrend.value}%`],
+        ["Transacoes concluidas", completedCount, previousCompletedCount, `${completedTrend.isPositive ? "+" : "-"}${completedTrend.value}%`],
+        ["Ticket medio", avgTicket, previousAvgTicket, `${avgTicketTrend.isPositive ? "+" : "-"}${avgTicketTrend.value}%`],
+        ["Transacoes pendentes", pendingTransactions.length, previousPendingTransactions.length, `${pendingTrend.isPositive ? "+" : "-"}${pendingTrend.value}%`],
+      ];
+      summaryRows.forEach((row, index) => {
+        const excelRow = summarySheet.getRow(index + 8);
       excelRow.values = row;
       excelRow.eachCell((cell, colNumber) => {
         cell.border = {
@@ -454,30 +538,30 @@ export default function FinancialPage() {
       if (index % 2 === 0) {
         excelRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
       }
-    });
-    ["B8", "C8", "B10", "C10"].forEach((address) => {
-      summarySheet.getCell(address).numFmt = '"R$" #,##0.00';
-    });
+      });
+      ["B8", "C8", "B10", "C10"].forEach((address) => {
+        summarySheet.getCell(address).numFmt = '"R$" #,##0.00';
+      });
 
-    summarySheet.getCell("F12").value = "Resumo";
-    summarySheet.getCell("F12").font = { bold: true, color: { argb: "FF0F172A" } };
-    summarySheet.mergeCells("F13:H16");
-    const recapCell = summarySheet.getCell("F13");
-    recapCell.value = `Receita atual: ${formatCurrencyBRL(periodRevenue)}\nReceita anterior: ${formatCurrencyBRL(previousRevenue)}\nTickets concluidos: ${completedCount}\nPendentes: ${pendingTransactions.length}`;
-    recapCell.alignment = { wrapText: true, vertical: "top" };
-    recapCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6FF" } };
-    recapCell.border = {
-      top: { style: "thin", color: { argb: "FFBFDBFE" } },
-      left: { style: "thin", color: { argb: "FFBFDBFE" } },
-      bottom: { style: "thin", color: { argb: "FFBFDBFE" } },
-      right: { style: "thin", color: { argb: "FFBFDBFE" } },
-    };
+      summarySheet.getCell("F12").value = "Resumo";
+      summarySheet.getCell("F12").font = { bold: true, color: { argb: "FF0F172A" } };
+      summarySheet.mergeCells("F13:H16");
+      const recapCell = summarySheet.getCell("F13");
+      recapCell.value = `Receita atual: ${formatCurrencyBRL(periodRevenue)}\nReceita anterior: ${formatCurrencyBRL(previousRevenue)}\nTickets concluidos: ${completedCount}\nPendentes: ${pendingTransactions.length}`;
+      recapCell.alignment = { wrapText: true, vertical: "top" };
+      recapCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6FF" } };
+      recapCell.border = {
+        top: { style: "thin", color: { argb: "FFBFDBFE" } },
+        left: { style: "thin", color: { argb: "FFBFDBFE" } },
+        bottom: { style: "thin", color: { argb: "FFBFDBFE" } },
+        right: { style: "thin", color: { argb: "FFBFDBFE" } },
+      };
 
-    const transactionSheet = workbook.addWorksheet("Transacoes", {
-      views: [{ state: "frozen", ySplit: 5 }],
-    });
-    transactionSheet.columns = [
-      { header: "Recibo", key: "receipt", width: 18 },
+      const transactionSheet = workbook.addWorksheet("Transacoes", {
+        views: [{ state: "frozen", ySplit: 5 }],
+      });
+      transactionSheet.columns = [
+        { header: "Recibo", key: "receipt", width: 18 },
       { header: "Placa", key: "plate", width: 12 },
       { header: "Cliente", key: "client", width: 24 },
       { header: "Valor", key: "amount", width: 14 },
@@ -485,28 +569,28 @@ export default function FinancialPage() {
       { header: "Status", key: "status", width: 14 },
       { header: "Duracao", key: "duration", width: 14 },
       { header: "Criado em", key: "createdAt", width: 22 },
-    ];
+      ];
 
-    transactionSheet.mergeCells("A1:H2");
-    const txTitle = transactionSheet.getCell("A1");
-    txTitle.value = "Detalhamento de Transacoes";
-    txTitle.font = { size: 20, bold: true, color: { argb: "FFFFFFFF" } };
-    txTitle.alignment = { vertical: "middle", horizontal: "left" };
-    txTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+      transactionSheet.mergeCells("A1:H2");
+      const txTitle = transactionSheet.getCell("A1");
+      txTitle.value = "Detalhamento de Transacoes";
+      txTitle.font = { size: 20, bold: true, color: { argb: "FFFFFFFF" } };
+      txTitle.alignment = { vertical: "middle", horizontal: "left" };
+      txTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
 
-    transactionSheet.mergeCells("A3:H3");
-    const txSubtitle = transactionSheet.getCell("A3");
-    txSubtitle.value = `Periodo ${rangeLabel}  |  Pagamento: ${paymentOptions.find((item) => item.value === paymentFilter)?.label}  |  Status: ${statusOptions.find((item) => item.value === statusFilter)?.label}`;
-    txSubtitle.font = { color: { argb: "FFCBD5E1" } };
-    txSubtitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+      transactionSheet.mergeCells("A3:H3");
+      const txSubtitle = transactionSheet.getCell("A3");
+      txSubtitle.value = `Periodo ${rangeLabel}  |  Pagamento: ${paymentOptions.find((item) => item.value === paymentFilter)?.label}  |  Status: ${statusOptions.find((item) => item.value === statusFilter)?.label}`;
+      txSubtitle.font = { color: { argb: "FFCBD5E1" } };
+      txSubtitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
 
-    const headerRow = transactionSheet.getRow(5);
-    headerRow.values = transactionSheet.columns.map((column) => column.header);
-    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
+      const headerRow = transactionSheet.getRow(5);
+      headerRow.values = transactionSheet.columns.map((column) => column.header);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
 
-    filteredTransactions.forEach((transaction, index) => {
-      const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+      filteredTransactions.forEach((transaction, index) => {
+        const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
       const row = transactionSheet.addRow({
         receipt: transaction.receiptNumber,
         plate: vehicle?.plate ?? "-",
@@ -529,9 +613,12 @@ export default function FinancialPage() {
       if (index % 2 === 0) {
         row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
       }
-    });
+      });
 
-    await downloadWorkbook(workbook, `financeiro-executivo-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+      await downloadWorkbook(workbook, `financeiro-executivo-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -593,9 +680,15 @@ export default function FinancialPage() {
               </PopoverContent>
             </Popover>
 
-            <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleExport}
+              disabled={isExporting}
+            >
               <Download className="h-4 w-4" />
-              Exportar
+              {isExporting ? "Gerando XLSX..." : "Exportar"}
             </Button>
             <Button size="sm" className="gap-2" onClick={() => navigate("/vehicles?status=delivered")}>
               <Receipt className="h-4 w-4" />
@@ -649,6 +742,62 @@ export default function FinancialPage() {
           </div>
         </div>
 
+        <Card className="border-primary/15 bg-gradient-to-r from-primary/5 via-background to-info/5">
+          <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <ArrowRightLeft className="h-5 w-5 text-primary" />
+                Como funciona a comparacao de periodos
+              </CardTitle>
+              <CardDescription>{comparisonDescription}</CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-2 self-start"
+              onClick={() => setShowComparisonGuide((current) => !current)}
+            >
+              <CircleHelp className="h-4 w-4" />
+              {showComparisonGuide ? "Ocultar explicacao" : "Mostrar explicacao"}
+            </Button>
+          </CardHeader>
+          {showComparisonGuide && (
+            <CardContent className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-border bg-background/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  1. Periodo selecionado
+                </p>
+                <p className="mt-2 text-base font-semibold text-foreground">{rangeLabel}</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Este e o intervalo que voce escolheu para analisar.
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-background/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  2. Base de comparacao
+                </p>
+                <p className="mt-2 text-base font-semibold text-foreground">{previousRangeLabel}</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  O sistema pega o bloco imediatamente anterior com o mesmo tamanho.
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-background/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  3. Resultado nos cards
+                </p>
+                <p className="mt-2 text-base font-semibold text-foreground">
+                  Ex.: {revenueTrend.isPositive ? "+" : "-"}
+                  {revenueTrend.value}% na receita
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Os percentuais mostram se o periodo atual cresceu ou caiu contra o periodo anterior.
+                </p>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title={`Receita - ${periodLabel}`}
@@ -685,12 +834,25 @@ export default function FinancialPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="space-y-6 lg:col-span-2">
             <RevenueChart
               data={chartData}
               title={`Receita - ${periodLabel}`}
-              subtitle={rangeLabel}
+              subtitle={
+                differenceInCalendarDays(activeRange.end, activeRange.start) === 0
+                  ? `${rangeLabel} | Visao por hora`
+                  : rangeLabel
+              }
               summaryNote={`${revenueTrend.isPositive ? "+" : "-"}${revenueTrend.value}% vs periodo anterior`}
+            />
+            <VehicleMovementChart
+              data={movementData}
+              title="Movimentacao de Veiculos"
+              subtitle={
+                differenceInCalendarDays(activeRange.end, activeRange.start) === 0
+                  ? "Shopping Center Norte | Entradas e saidas por hora"
+                  : "Shopping Center Norte | Entradas e saidas no periodo"
+              }
             />
           </div>
 

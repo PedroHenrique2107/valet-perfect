@@ -15,6 +15,22 @@ interface RevenueTooltipProps {
   payload?: Array<{ value: number; payload: RevenueData }>;
 }
 
+function formatCompactAxisValue(value: number) {
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
+  }
+
+  if (value >= 100) {
+    return Math.round(value).toString();
+  }
+
+  if (value >= 10) {
+    return value.toFixed(0);
+  }
+
+  return value.toFixed(0);
+}
+
 function CustomTooltip({ active, payload, label }: RevenueTooltipProps) {
   if (!active || !payload || payload.length === 0) {
     return null;
@@ -50,7 +66,7 @@ export function RevenueChart({
         </div>
       </div>
       <ResponsiveContainer width="100%" height="80%">
-        <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 10, right: 10, left: -8, bottom: 0 }}>
           <defs>
             <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
@@ -63,12 +79,14 @@ export function RevenueChart({
             axisLine={false}
             tickLine={false}
             tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 12 }}
+            minTickGap={18}
           />
           <YAxis
+            width={44}
             axisLine={false}
             tickLine={false}
             tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 12 }}
-            tickFormatter={(value) => `${value / 1000}k`}
+            tickFormatter={formatCompactAxisValue}
           />
           <Tooltip content={<CustomTooltip />} />
           <Area
