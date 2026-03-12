@@ -1,0 +1,4 @@
+1. Aos casos que foi pago o valor da diária antecipado, ao registrar saida PRECISA ESTAR ZERADO
+
+2. Número que aparece na hotbar sobre a quantidade de veiculo, precisa ser de acordo com os veiculos que estão ESTACIONADOS apenas
+

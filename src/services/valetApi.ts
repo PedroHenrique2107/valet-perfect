@@ -4,7 +4,6 @@
   clientsDb,
   occupancyDataDb,
   parkingSpotsDb,
-  revenueDataDb,
   transactionsDb,
   vehiclesDb,
 } from "@/data/mockDb";
@@ -206,12 +205,59 @@ function sortSpotsInSection(spots: ParkingSpot[]) {
     });
 }
 
+function isSameDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function formatRevenueDate(date: Date) {
+  return date.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function getCompletedTransactions() {
+  return transactionsDb.filter((transaction) => transaction.status === "completed");
+}
+
+function buildRevenueDataSnapshot(days: number = 7): RevenueData[] {
+  const today = new Date();
+  const buckets = Array.from({ length: days }, (_, index) => {
+    const date = new Date(today);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(today.getDate() - (days - index - 1));
+    return {
+      date,
+      revenue: 0,
+      transactions: 0,
+    };
+  });
+
+  getCompletedTransactions().forEach((transaction) => {
+    const bucket = buckets.find((item) => isSameDay(item.date, transaction.createdAt));
+    if (!bucket) return;
+    bucket.revenue += transaction.amount;
+    bucket.transactions += 1;
+  });
+
+  return buckets.map((bucket) => ({
+    date: formatRevenueDate(bucket.date),
+    revenue: bucket.revenue,
+    transactions: bucket.transactions,
+  }));
+}
+
 // Função para calcular e retornar um snapshot dos principais indicadores do dashboard, como número total de veículos, vagas disponíveis, taxa de ocupação, receita do dia, duração média de estadia, número de manobristas ativos, veículos aguardando e tempo médio de espera
 function getDashboardStatsSnapshot(): DashboardStats {
   const activeVehicles = vehiclesDb.filter((vehicle) => vehicle.status !== "delivered"); // Considera veículos em qualquer status exceto "delivered" como ativos
   const availableSpots = parkingSpotsDb.filter((spot) => spot.status === "available").length; // Conta o número de vagas disponíveis
   const occupiedSpots = parkingSpotsDb.filter((spot) => spot.status === "occupied").length; // Conta o número de vagas ocupadas
-  const completedTransactions = transactionsDb.filter((tx) => tx.status === "completed"); // Filtra as transações que foram concluídas
+  const today = new Date();
+  const completedTransactions = getCompletedTransactions(); // Filtra as transações que foram concluídas
   const activeAttendants = attendantsDb.filter((attendant) => attendant.isOnline).length; // Conta o número de manobristas ativos
 
   // Filtra os veículos que estão aguardando para serem entregues (status "requested" ou "in_transit")
@@ -243,7 +289,9 @@ function getDashboardStatsSnapshot(): DashboardStats {
     totalVehicles: activeVehicles.length, // Número total de veículos ativos (em qualquer status exceto "delivered")
     availableSpots, // Número de vagas disponíveis
     occupancyRate: parkingSpotsDb.length > 0 ? Math.round((occupiedSpots / parkingSpotsDb.length) * 100) : 0, // Taxa de ocupação calculada como a porcentagem de vagas ocupadas em relação ao total de vagas
-    todayRevenue: completedTransactions.reduce((acc, tx) => acc + tx.amount, 0), // Receita total do dia calculada como a soma dos valores das transações concluídas
+    todayRevenue: completedTransactions
+      .filter((transaction) => isSameDay(transaction.createdAt, today))
+      .reduce((acc, tx) => acc + tx.amount, 0), // Receita total do dia calculada como a soma dos valores das transações concluídas
     avgStayDuration, // Duração média de estadia dos veículos ativos, em minutos
     activeAttendants, // Número de manobristas ativos (online)
     vehiclesWaiting: waitingVehicles.length, // Número de veículos que estão aguardando para serem entregues (status "requested" ou "in_transit")
@@ -264,7 +312,7 @@ export const valetApi = {
       }),
     ),
   getTransactions: (): Promise<Transaction[]> => simulateNetwork([...transactionsDb]),
-  getRevenueData: (): Promise<RevenueData[]> => simulateNetwork([...revenueDataDb]),
+  getRevenueData: (): Promise<RevenueData[]> => simulateNetwork(buildRevenueDataSnapshot()),
   getOccupancyData: (): Promise<OccupancyData[]> => simulateNetwork([...occupancyDataDb]),
   getDashboardStats: (): Promise<DashboardStats> => simulateNetwork(getDashboardStatsSnapshot()),
   getClients: (): Promise<Client[]> => simulateNetwork([...clientsDb]),
@@ -828,6 +876,29 @@ export const valetApi = {
       completedAt: new Date(),
       receiptNumber: `REC-${new Date().getFullYear()}-${String(transactionsDb.length + 1).padStart(4, "0")}`,
       duration,
+    });
+
+    const linkedClient = clientsDb.find(
+      (client) =>
+        client.name.trim().toLowerCase() === vehicle.clientName.trim().toLowerCase() ||
+        (vehicle.clientPhone &&
+          client.phone.replace(/\D/g, "") === vehicle.clientPhone.replace(/\D/g, "")),
+    );
+    if (linkedClient) {
+      linkedClient.totalVisits += 1;
+      linkedClient.totalSpent += input.amount;
+      if (!linkedClient.vehicles.includes(vehicle.plate)) {
+        linkedClient.vehicles.push(vehicle.plate);
+      }
+    }
+
+    createActivity({
+      id: createId("act"),
+      type: "payment",
+      title: "Pagamento Recebido",
+      description: `${input.paymentMethod.toUpperCase()} de R$ ${input.amount.toFixed(2)} - ${vehicle.clientName}`,
+      time: "agora",
+      plate: vehicle.plate,
     });
 
     // Registra uma atividade de saída para monitoramento e histórico do sistema, indicando que o veículo foi entregue e a duração da estadia, para fins de análise e acompanhamento do desempenho do serviço

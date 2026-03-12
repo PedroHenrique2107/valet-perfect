@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Car, Grid3X3, List, Plus, Search, Trash2 } from "lucide-react";
 import { COMPANY_NAME, DEFAULT_UNIT_NAME } from "@/config/pricing";
 import { VehicleStatusCard } from "@/components/dashboard/VehicleStatusCard";
@@ -31,9 +32,12 @@ const statusFilters: { value: VehicleStatus | "all" | "agreement"; label: string
 ];
 
 export default function VehiclesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<VehicleStatus | "all" | "agreement">("all");
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
+  const [statusFilter, setStatusFilter] = useState<VehicleStatus | "all" | "agreement">(
+    (searchParams.get("status") as VehicleStatus | "all" | "agreement") ?? "all",
+  );
   const [entryOpen, setEntryOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -50,6 +54,39 @@ export default function VehiclesPage() {
   const clearAllVehicles = useClearAllVehiclesMutation();
 
   const filteredVehicles = filterVehicles(vehicles, searchQuery, statusFilter);
+
+  useEffect(() => {
+    const nextQuery = searchParams.get("q") ?? "";
+    const rawStatus = searchParams.get("status");
+    const isValidStatus = statusFilters.some((filter) => filter.value === rawStatus);
+    const nextStatus = isValidStatus ? (rawStatus as VehicleStatus | "all" | "agreement") : "all";
+
+    if (nextQuery !== searchQuery) {
+      setSearchQuery(nextQuery);
+    }
+    if (nextStatus !== statusFilter) {
+      setStatusFilter(nextStatus);
+    }
+  }, [searchParams, searchQuery, statusFilter]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (searchQuery.trim()) {
+      nextParams.set("q", searchQuery.trim());
+    } else {
+      nextParams.delete("q");
+    }
+
+    if (statusFilter !== "all") {
+      nextParams.set("status", statusFilter);
+    } else {
+      nextParams.delete("status");
+    }
+
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchQuery, searchParams, setSearchParams, statusFilter]);
 
   useEffect(() => {
     if (!selectedVehicle) return;
