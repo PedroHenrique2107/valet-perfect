@@ -9,7 +9,7 @@ import {
 import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { useNavigate } from "react-router-dom";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import {
   differenceInCalendarDays,
   eachDayOfInterval,
@@ -33,6 +33,13 @@ import { Button } from "@/components/ui/button";
 import { Calendar as DatePickerCalendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   useDashboardStatsQuery,
   useTransactionsQuery,
   useVehiclesQuery,
@@ -41,6 +48,8 @@ import { formatCurrencyBRL, formatDateTimeBR, formatDurationMinutes } from "@/li
 import type { PaymentMethod, PaymentStatus, RevenueData, Transaction } from "@/types/valet";
 
 type PeriodPreset = "today" | "7d" | "1m" | "6m" | "1y" | "custom";
+type PaymentFilter = PaymentMethod | "all";
+type StatusFilter = PaymentStatus | "all";
 
 const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
   { value: "today", label: "Hoje" },
@@ -49,6 +58,23 @@ const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
   { value: "6m", label: "Ultimos 6 meses" },
   { value: "1y", label: "Ultimo 1 ano" },
   { value: "custom", label: "Personalizado" },
+];
+
+const paymentOptions: Array<{ value: PaymentFilter; label: string }> = [
+  { value: "all", label: "Todos pagamentos" },
+  { value: "pix", label: "PIX" },
+  { value: "credit", label: "Credito" },
+  { value: "debit", label: "Debito" },
+  { value: "cash", label: "Dinheiro" },
+  { value: "monthly", label: "Mensalista" },
+];
+
+const statusOptions: Array<{ value: StatusFilter; label: string }> = [
+  { value: "all", label: "Todos status" },
+  { value: "completed", label: "Concluido" },
+  { value: "pending", label: "Pendente" },
+  { value: "failed", label: "Falhou" },
+  { value: "refunded", label: "Estornado" },
 ];
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
@@ -96,6 +122,14 @@ function getResolvedRange(period: PeriodPreset, customRange?: DateRange) {
   }
 }
 
+function getPreviousRange(start: Date, end: Date) {
+  const spanInDays = differenceInCalendarDays(end, start) + 1;
+  return {
+    start: startOfDay(subDays(start, spanInDays)),
+    end: endOfDay(subDays(start, 1)),
+  };
+}
+
 function getPeriodLabel(period: PeriodPreset, customRange?: DateRange) {
   if (period !== "custom") {
     return periodOptions.find((option) => option.value === period)?.label ?? "Periodo";
@@ -112,6 +146,31 @@ function getPeriodLabel(period: PeriodPreset, customRange?: DateRange) {
   return "Personalizado";
 }
 
+function matchesTransactionFilters(
+  transaction: Transaction,
+  paymentFilter: PaymentFilter,
+  statusFilter: StatusFilter,
+) {
+  const matchesPayment = paymentFilter === "all" || transaction.paymentMethod === paymentFilter;
+  const matchesStatus = statusFilter === "all" || transaction.status === statusFilter;
+  return matchesPayment && matchesStatus;
+}
+
+function calculateChange(current: number, previous: number) {
+  if (previous === 0) {
+    return {
+      value: current > 0 ? 100 : 0,
+      isPositive: current >= previous,
+    };
+  }
+
+  const delta = ((current - previous) / previous) * 100;
+  return {
+    value: Number(Math.abs(delta).toFixed(1)),
+    isPositive: delta >= 0,
+  };
+}
+
 function buildRevenueChartData(
   transactions: Transaction[],
   start: Date,
@@ -121,8 +180,7 @@ function buildRevenueChartData(
   const useMonthlyBuckets = spanInDays > 62;
 
   if (useMonthlyBuckets) {
-    const months = eachMonthOfInterval({ start, end });
-    return months.map((monthDate) => {
+    return eachMonthOfInterval({ start, end }).map((monthDate) => {
       const monthStart = startOfMonth(monthDate);
       const monthEnd = endOfMonth(monthDate);
       const monthTransactions = transactions.filter((transaction) =>
@@ -137,12 +195,9 @@ function buildRevenueChartData(
     });
   }
 
-  const days = eachDayOfInterval({ start, end });
-  return days.map((dayDate) => {
-    const dayStart = startOfDay(dayDate);
-    const dayEnd = endOfDay(dayDate);
+  return eachDayOfInterval({ start, end }).map((dayDate) => {
     const dayTransactions = transactions.filter((transaction) =>
-      isWithinInterval(transaction.createdAt, { start: dayStart, end: dayEnd }),
+      isWithinInterval(transaction.createdAt, { start: startOfDay(dayDate), end: endOfDay(dayDate) }),
     );
 
     return {
@@ -151,6 +206,58 @@ function buildRevenueChartData(
       transactions: dayTransactions.length,
     };
   });
+}
+
+function createLogoBase64() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 420;
+  canvas.height = 110;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return undefined;
+  }
+
+  context.fillStyle = "#0f172a";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const radius = 18;
+  context.fillStyle = "#2563eb";
+  context.beginPath();
+  context.moveTo(24 + radius, 22);
+  context.lineTo(90 - radius, 22);
+  context.quadraticCurveTo(90, 22, 90, 22 + radius);
+  context.lineTo(90, 88 - radius);
+  context.quadraticCurveTo(90, 88, 90 - radius, 88);
+  context.lineTo(24 + radius, 88);
+  context.quadraticCurveTo(24, 88, 24, 88 - radius);
+  context.lineTo(24, 22 + radius);
+  context.quadraticCurveTo(24, 22, 24 + radius, 22);
+  context.closePath();
+  context.fill();
+
+  context.fillStyle = "#ffffff";
+  context.font = "bold 34px Arial";
+  context.fillText("V", 46, 66);
+  context.font = "bold 26px Arial";
+  context.fillText("ValetTracker", 112, 52);
+  context.font = "16px Arial";
+  context.fillStyle = "#cbd5e1";
+  context.fillText("Financial Executive Report", 113, 78);
+
+  return canvas.toDataURL("image/png");
+}
+
+async function downloadWorkbook(workbook: ExcelJS.Workbook, filename: string) {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.URL.revokeObjectURL(url);
 }
 
 export default function FinancialPage() {
@@ -165,21 +272,40 @@ export default function FinancialPage() {
     from: subDays(new Date(), 6),
     to: new Date(),
   });
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const activeRange = useMemo(
     () => getResolvedRange(selectedPeriod, customRange),
     [customRange, selectedPeriod],
   );
+  const previousRange = useMemo(
+    () => getPreviousRange(activeRange.start, activeRange.end),
+    [activeRange.end, activeRange.start],
+  );
 
   const filteredTransactions = useMemo(
     () =>
-      transactions.filter((transaction) =>
-        isWithinInterval(transaction.createdAt, {
-          start: activeRange.start,
-          end: activeRange.end,
-        }),
+      transactions.filter(
+        (transaction) =>
+          isWithinInterval(transaction.createdAt, {
+            start: activeRange.start,
+            end: activeRange.end,
+          }) && matchesTransactionFilters(transaction, paymentFilter, statusFilter),
       ),
-    [activeRange.end, activeRange.start, transactions],
+    [activeRange.end, activeRange.start, paymentFilter, statusFilter, transactions],
+  );
+
+  const previousFilteredTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          isWithinInterval(transaction.createdAt, {
+            start: previousRange.start,
+            end: previousRange.end,
+          }) && matchesTransactionFilters(transaction, paymentFilter, statusFilter),
+      ),
+    [paymentFilter, previousRange.end, previousRange.start, statusFilter, transactions],
   );
 
   const completedTransactions = useMemo(
@@ -190,12 +316,33 @@ export default function FinancialPage() {
     [filteredTransactions],
   );
 
-  const pendingTransactions = filteredTransactions.filter(
+  const previousCompletedTransactions = useMemo(
+    () =>
+      previousFilteredTransactions.filter((transaction) => transaction.status === "completed"),
+    [previousFilteredTransactions],
+  );
+
+  const pendingTransactions = filteredTransactions.filter((transaction) => transaction.status === "pending");
+  const previousPendingTransactions = previousFilteredTransactions.filter(
     (transaction) => transaction.status === "pending",
   );
+
   const periodRevenue = completedTransactions.reduce((acc, transaction) => acc + transaction.amount, 0);
+  const previousRevenue = previousCompletedTransactions.reduce(
+    (acc, transaction) => acc + transaction.amount,
+    0,
+  );
   const completedCount = completedTransactions.length;
+  const previousCompletedCount = previousCompletedTransactions.length;
   const avgTicket = completedCount > 0 ? periodRevenue / completedCount : 0;
+  const previousAvgTicket =
+    previousCompletedCount > 0 ? previousRevenue / previousCompletedCount : 0;
+
+  const revenueTrend = calculateChange(periodRevenue, previousRevenue);
+  const completedTrend = calculateChange(completedCount, previousCompletedCount);
+  const avgTicketTrend = calculateChange(avgTicket, previousAvgTicket);
+  const pendingTrend = calculateChange(pendingTransactions.length, previousPendingTransactions.length);
+
   const paymentBreakdown = Object.entries(
     completedTransactions.reduce<Record<PaymentMethod, { amount: number; count: number }>>(
       (acc, transaction) => {
@@ -227,72 +374,164 @@ export default function FinancialPage() {
 
   const periodLabel = getPeriodLabel(selectedPeriod, customRange);
   const rangeLabel = `${format(activeRange.start, "dd/MM/yyyy")} - ${format(activeRange.end, "dd/MM/yyyy")}`;
+  const previousRangeLabel = `${format(previousRange.start, "dd/MM/yyyy")} - ${format(previousRange.end, "dd/MM/yyyy")}`;
 
-  const handleExport = () => {
-    const workbook = XLSX.utils.book_new();
+  const handleExport = async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Codex";
+    workbook.company = "ValetTracker";
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
+    const summarySheet = workbook.addWorksheet("Resumo Executivo", {
+      views: [{ state: "frozen", ySplit: 7 }],
+    });
+    summarySheet.properties.defaultRowHeight = 22;
+    summarySheet.columns = [
+      { key: "a", width: 24 },
+      { key: "b", width: 24 },
+      { key: "c", width: 20 },
+      { key: "d", width: 20 },
+      { key: "e", width: 20 },
+      { key: "f", width: 16 },
+      { key: "g", width: 16 },
+      { key: "h", width: 18 },
+    ];
+
+    summarySheet.mergeCells("B1:H3");
+    const titleCell = summarySheet.getCell("B1");
+    titleCell.value = "Relatorio Financeiro Executivo";
+    titleCell.font = { size: 22, bold: true, color: { argb: "FFFFFFFF" } };
+    titleCell.alignment = { vertical: "middle", horizontal: "left" };
+    titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
+
+    const subtitleCell = summarySheet.getCell("B3");
+    subtitleCell.value = `Periodo: ${periodLabel}  |  Filtros: ${paymentOptions.find((item) => item.value === paymentFilter)?.label}, ${statusOptions.find((item) => item.value === statusFilter)?.label}`;
+    subtitleCell.font = { size: 11, color: { argb: "FFE2E8F0" } };
+    subtitleCell.alignment = { vertical: "middle", horizontal: "left" };
+    subtitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
+
+    const logo = createLogoBase64();
+    if (logo) {
+      const imageId = workbook.addImage({ base64: logo, extension: "png" });
+      summarySheet.addImage(imageId, "A1:A3");
+    }
+
+    summarySheet.getRow(5).values = [
+      "Intervalo atual",
+      rangeLabel,
+      "Periodo anterior",
+      previousRangeLabel,
+      "Gerado em",
+      formatDateTimeBR(new Date()),
+    ];
+    summarySheet.getRow(5).font = { bold: true, color: { argb: "FF0F172A" } };
+
+    summarySheet.getRow(7).values = ["Indicador", "Atual", "Anterior", "Variacao"];
+    summarySheet.getRow(7).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    summarySheet.getRow(7).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
 
     const summaryRows = [
-      ["Relatorio Financeiro ValetTracker"],
-      [`Periodo: ${periodLabel}`],
-      [`Intervalo: ${rangeLabel}`],
-      [`Gerado em: ${formatDateTimeBR(new Date())}`],
-      [],
-      ["Indicador", "Valor"],
-      ["Receita do periodo", periodRevenue],
-      ["Transacoes concluidas", completedCount],
-      ["Ticket medio", avgTicket],
-      ["Transacoes pendentes", pendingTransactions.length],
+      ["Receita", periodRevenue, previousRevenue, `${revenueTrend.isPositive ? "+" : "-"}${revenueTrend.value}%`],
+      ["Transacoes concluidas", completedCount, previousCompletedCount, `${completedTrend.isPositive ? "+" : "-"}${completedTrend.value}%`],
+      ["Ticket medio", avgTicket, previousAvgTicket, `${avgTicketTrend.isPositive ? "+" : "-"}${avgTicketTrend.value}%`],
+      ["Transacoes pendentes", pendingTransactions.length, previousPendingTransactions.length, `${pendingTrend.isPositive ? "+" : "-"}${pendingTrend.value}%`],
     ];
-
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
-    summarySheet["!cols"] = [{ wch: 28 }, { wch: 22 }];
-    summarySheet["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } },
-      { s: { r: 2, c: 0 }, e: { r: 2, c: 1 } },
-      { s: { r: 3, c: 0 }, e: { r: 3, c: 1 } },
-    ];
-    ["B7", "B9"].forEach((cell) => {
-      if (summarySheet[cell]) {
-        summarySheet[cell].z = '"R$" #,##0.00';
+    summaryRows.forEach((row, index) => {
+      const excelRow = summarySheet.getRow(index + 8);
+      excelRow.values = row;
+      excelRow.eachCell((cell, colNumber) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE2E8F0" } },
+          left: { style: "thin", color: { argb: "FFE2E8F0" } },
+          bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+          right: { style: "thin", color: { argb: "FFE2E8F0" } },
+        };
+        if (colNumber === 1) {
+          cell.font = { bold: true, color: { argb: "FF0F172A" } };
+        }
+      });
+      if (index % 2 === 0) {
+        excelRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
       }
     });
+    ["B8", "C8", "B10", "C10"].forEach((address) => {
+      summarySheet.getCell(address).numFmt = '"R$" #,##0.00';
+    });
 
-    const transactionRows = filteredTransactions.map((transaction) => {
+    summarySheet.getCell("F12").value = "Resumo";
+    summarySheet.getCell("F12").font = { bold: true, color: { argb: "FF0F172A" } };
+    summarySheet.mergeCells("F13:H16");
+    const recapCell = summarySheet.getCell("F13");
+    recapCell.value = `Receita atual: ${formatCurrencyBRL(periodRevenue)}\nReceita anterior: ${formatCurrencyBRL(previousRevenue)}\nTickets concluidos: ${completedCount}\nPendentes: ${pendingTransactions.length}`;
+    recapCell.alignment = { wrapText: true, vertical: "top" };
+    recapCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6FF" } };
+    recapCell.border = {
+      top: { style: "thin", color: { argb: "FFBFDBFE" } },
+      left: { style: "thin", color: { argb: "FFBFDBFE" } },
+      bottom: { style: "thin", color: { argb: "FFBFDBFE" } },
+      right: { style: "thin", color: { argb: "FFBFDBFE" } },
+    };
+
+    const transactionSheet = workbook.addWorksheet("Transacoes", {
+      views: [{ state: "frozen", ySplit: 5 }],
+    });
+    transactionSheet.columns = [
+      { header: "Recibo", key: "receipt", width: 18 },
+      { header: "Placa", key: "plate", width: 12 },
+      { header: "Cliente", key: "client", width: 24 },
+      { header: "Valor", key: "amount", width: 14 },
+      { header: "Pagamento", key: "paymentMethod", width: 18 },
+      { header: "Status", key: "status", width: 14 },
+      { header: "Duracao", key: "duration", width: 14 },
+      { header: "Criado em", key: "createdAt", width: 22 },
+    ];
+
+    transactionSheet.mergeCells("A1:H2");
+    const txTitle = transactionSheet.getCell("A1");
+    txTitle.value = "Detalhamento de Transacoes";
+    txTitle.font = { size: 20, bold: true, color: { argb: "FFFFFFFF" } };
+    txTitle.alignment = { vertical: "middle", horizontal: "left" };
+    txTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+
+    transactionSheet.mergeCells("A3:H3");
+    const txSubtitle = transactionSheet.getCell("A3");
+    txSubtitle.value = `Periodo ${rangeLabel}  |  Pagamento: ${paymentOptions.find((item) => item.value === paymentFilter)?.label}  |  Status: ${statusOptions.find((item) => item.value === statusFilter)?.label}`;
+    txSubtitle.font = { color: { argb: "FFCBD5E1" } };
+    txSubtitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+
+    const headerRow = transactionSheet.getRow(5);
+    headerRow.values = transactionSheet.columns.map((column) => column.header);
+    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
+
+    filteredTransactions.forEach((transaction, index) => {
       const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
-      return {
-        Recibo: transaction.receiptNumber,
-        Placa: vehicle?.plate ?? "-",
-        Cliente: vehicle?.clientName ?? "-",
-        Valor: transaction.amount,
-        Pagamento: paymentMethodLabels[transaction.paymentMethod],
-        Status: paymentStatusConfig[transaction.status].label,
-        "Duracao (min)": transaction.duration,
-        "Criado em": formatDateTimeBR(transaction.createdAt),
-      };
-    });
-
-    const transactionsSheet = XLSX.utils.json_to_sheet(transactionRows);
-    transactionsSheet["!cols"] = [
-      { wch: 18 },
-      { wch: 12 },
-      { wch: 24 },
-      { wch: 14 },
-      { wch: 18 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 22 },
-    ];
-    transactionRows.forEach((_row, index) => {
-      const cellAddress = XLSX.utils.encode_cell({ r: index + 1, c: 3 });
-      if (transactionsSheet[cellAddress]) {
-        transactionsSheet[cellAddress].z = '"R$" #,##0.00';
+      const row = transactionSheet.addRow({
+        receipt: transaction.receiptNumber,
+        plate: vehicle?.plate ?? "-",
+        client: vehicle?.clientName ?? "-",
+        amount: transaction.amount,
+        paymentMethod: paymentMethodLabels[transaction.paymentMethod],
+        status: paymentStatusConfig[transaction.status].label,
+        duration: `${transaction.duration} min`,
+        createdAt: formatDateTimeBR(transaction.createdAt),
+      });
+      row.getCell("amount").numFmt = '"R$" #,##0.00';
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE5E7EB" } },
+          left: { style: "thin", color: { argb: "FFE5E7EB" } },
+          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+          right: { style: "thin", color: { argb: "FFE5E7EB" } },
+        };
+      });
+      if (index % 2 === 0) {
+        row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
       }
     });
 
-    XLSX.utils.book_append_sheet(workbook, summarySheet, "Resumo");
-    XLSX.utils.book_append_sheet(workbook, transactionsSheet, "Transacoes");
-    XLSX.writeFile(workbook, `financeiro-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    await downloadWorkbook(workbook, `financeiro-executivo-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
 
   return (
@@ -364,6 +603,51 @@ export default function FinancialPage() {
             </Button>
           </div>
         </div>
+        <div className="grid grid-cols-1 gap-4 rounded-2xl border border-border bg-card p-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Pagamento</p>
+            <Select value={paymentFilter} onValueChange={(value) => setPaymentFilter(value as PaymentFilter)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {paymentOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Status</p>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-end">
+            <Badge variant="outline" className="h-10 px-3 text-sm">
+              Atual: {rangeLabel}
+            </Badge>
+          </div>
+
+          <div className="flex items-end">
+            <Badge variant="outline" className="h-10 px-3 text-sm">
+              Anterior: {previousRangeLabel}
+            </Badge>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
@@ -371,6 +655,7 @@ export default function FinancialPage() {
             value={formatCurrencyBRL(periodRevenue)}
             subtitle={rangeLabel}
             icon={DollarSign}
+            trend={{ ...revenueTrend, label: "vs periodo anterior" }}
             variant="success"
           />
           <StatCard
@@ -378,6 +663,7 @@ export default function FinancialPage() {
             value={completedCount}
             subtitle={periodLabel}
             icon={TrendingUp}
+            trend={{ ...completedTrend, label: "vs periodo anterior" }}
             variant="primary"
           />
           <StatCard
@@ -385,6 +671,7 @@ export default function FinancialPage() {
             value={formatCurrencyBRL(avgTicket)}
             subtitle="Media por pagamento concluido"
             icon={Receipt}
+            trend={{ ...avgTicketTrend, label: "vs periodo anterior" }}
             variant="info"
           />
           <StatCard
@@ -392,6 +679,7 @@ export default function FinancialPage() {
             value={pendingTransactions.length}
             subtitle={periodLabel}
             icon={CreditCard}
+            trend={{ ...pendingTrend, label: "vs periodo anterior" }}
             variant={pendingTransactions.length > 0 ? "warning" : "default"}
           />
         </div>
@@ -402,7 +690,7 @@ export default function FinancialPage() {
               data={chartData}
               title={`Receita - ${periodLabel}`}
               subtitle={rangeLabel}
-              summaryNote={`${completedCount} pagamento(s) concluido(s)`}
+              summaryNote={`${revenueTrend.isPositive ? "+" : "-"}${revenueTrend.value}% vs periodo anterior`}
             />
           </div>
 
@@ -444,7 +732,7 @@ export default function FinancialPage() {
               <div>
                 <h3 className="font-semibold text-foreground">Transacoes Recentes</h3>
                 <p className="text-sm text-muted-foreground">
-                  Lista atualizada pelo mesmo filtro de periodo
+                  Lista atualizada pelos filtros de periodo, pagamento e status
                 </p>
               </div>
               <Button
@@ -526,7 +814,7 @@ export default function FinancialPage() {
               </table>
               {filteredTransactions.length === 0 && (
                 <div className="py-6 text-center text-sm text-muted-foreground">
-                  Nenhuma transacao encontrada para o periodo selecionado.
+                  Nenhuma transacao encontrada para os filtros selecionados.
                 </div>
               )}
             </div>
