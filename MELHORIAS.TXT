@@ -2,3 +2,5 @@
 
 2. Número que aparece na hotbar sobre a quantidade de veiculo, precisa ser de acordo com os veiculos que estão ESTACIONADOS apenas
 
+3. Relatório Financeiro, acrescentar uma planilha com os dashboard
+

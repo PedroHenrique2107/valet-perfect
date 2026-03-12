@@ -6,21 +6,50 @@ import {
   Receipt,
   TrendingUp,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import type { DateRange } from "react-day-picker";
 import { useNavigate } from "react-router-dom";
+import * as XLSX from "xlsx";
+import {
+  differenceInCalendarDays,
+  eachDayOfInterval,
+  eachMonthOfInterval,
+  endOfDay,
+  endOfMonth,
+  format,
+  isWithinInterval,
+  startOfDay,
+  startOfMonth,
+  subDays,
+  subMonths,
+  subYears,
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar as DatePickerCalendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   useDashboardStatsQuery,
-  useRevenueDataQuery,
   useTransactionsQuery,
   useVehiclesQuery,
 } from "@/hooks/useValetData";
 import { formatCurrencyBRL, formatDateTimeBR, formatDurationMinutes } from "@/lib/format";
-import type { PaymentMethod, PaymentStatus } from "@/types/valet";
+import type { PaymentMethod, PaymentStatus, RevenueData, Transaction } from "@/types/valet";
+
+type PeriodPreset = "today" | "7d" | "1m" | "6m" | "1y" | "custom";
+
+const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
+  { value: "today", label: "Hoje" },
+  { value: "7d", label: "Ultimos 7 dias" },
+  { value: "1m", label: "Ultimo mes" },
+  { value: "6m", label: "Ultimos 6 meses" },
+  { value: "1y", label: "Ultimo 1 ano" },
+  { value: "custom", label: "Personalizado" },
+];
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   pix: "PIX",
@@ -45,40 +74,128 @@ const paymentStatusConfig: Record<PaymentStatus, { label: string; className: str
   refunded: { label: "Estornado", className: "bg-muted text-muted-foreground" },
 };
 
-function isSameDay(left: Date, right: Date) {
-  return (
-    left.getDate() === right.getDate() &&
-    left.getMonth() === right.getMonth() &&
-    left.getFullYear() === right.getFullYear()
-  );
+function getResolvedRange(period: PeriodPreset, customRange?: DateRange) {
+  const now = new Date();
+
+  switch (period) {
+    case "today":
+      return { start: startOfDay(now), end: endOfDay(now) };
+    case "7d":
+      return { start: startOfDay(subDays(now, 6)), end: endOfDay(now) };
+    case "1m":
+      return { start: startOfDay(subMonths(now, 1)), end: endOfDay(now) };
+    case "6m":
+      return { start: startOfDay(subMonths(now, 6)), end: endOfDay(now) };
+    case "1y":
+      return { start: startOfDay(subYears(now, 1)), end: endOfDay(now) };
+    case "custom":
+      return {
+        start: startOfDay(customRange?.from ?? subDays(now, 6)),
+        end: endOfDay(customRange?.to ?? customRange?.from ?? now),
+      };
+  }
+}
+
+function getPeriodLabel(period: PeriodPreset, customRange?: DateRange) {
+  if (period !== "custom") {
+    return periodOptions.find((option) => option.value === period)?.label ?? "Periodo";
+  }
+
+  if (customRange?.from && customRange?.to) {
+    return `${format(customRange.from, "dd/MM/yyyy")} ate ${format(customRange.to, "dd/MM/yyyy")}`;
+  }
+
+  if (customRange?.from) {
+    return format(customRange.from, "dd/MM/yyyy");
+  }
+
+  return "Personalizado";
+}
+
+function buildRevenueChartData(
+  transactions: Transaction[],
+  start: Date,
+  end: Date,
+): RevenueData[] {
+  const spanInDays = differenceInCalendarDays(end, start) + 1;
+  const useMonthlyBuckets = spanInDays > 62;
+
+  if (useMonthlyBuckets) {
+    const months = eachMonthOfInterval({ start, end });
+    return months.map((monthDate) => {
+      const monthStart = startOfMonth(monthDate);
+      const monthEnd = endOfMonth(monthDate);
+      const monthTransactions = transactions.filter((transaction) =>
+        isWithinInterval(transaction.createdAt, { start: monthStart, end: monthEnd }),
+      );
+
+      return {
+        date: format(monthDate, "MMM/yy", { locale: ptBR }),
+        revenue: monthTransactions.reduce((acc, transaction) => acc + transaction.amount, 0),
+        transactions: monthTransactions.length,
+      };
+    });
+  }
+
+  const days = eachDayOfInterval({ start, end });
+  return days.map((dayDate) => {
+    const dayStart = startOfDay(dayDate);
+    const dayEnd = endOfDay(dayDate);
+    const dayTransactions = transactions.filter((transaction) =>
+      isWithinInterval(transaction.createdAt, { start: dayStart, end: dayEnd }),
+    );
+
+    return {
+      date: format(dayDate, "dd/MM"),
+      revenue: dayTransactions.reduce((acc, transaction) => acc + transaction.amount, 0),
+      transactions: dayTransactions.length,
+    };
+  });
 }
 
 export default function FinancialPage() {
   const navigate = useNavigate();
   const { data: dashboardStats } = useDashboardStatsQuery();
-  const { data: revenueData = [] } = useRevenueDataQuery();
   const { data: transactions = [] } = useTransactionsQuery();
   const { data: vehicles = [] } = useVehiclesQuery();
 
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodPreset>("7d");
+  const [periodPopoverOpen, setPeriodPopoverOpen] = useState(false);
+  const [customRange, setCustomRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 6),
+    to: new Date(),
+  });
+
+  const activeRange = useMemo(
+    () => getResolvedRange(selectedPeriod, customRange),
+    [customRange, selectedPeriod],
+  );
+
+  const filteredTransactions = useMemo(
+    () =>
+      transactions.filter((transaction) =>
+        isWithinInterval(transaction.createdAt, {
+          start: activeRange.start,
+          end: activeRange.end,
+        }),
+      ),
+    [activeRange.end, activeRange.start, transactions],
+  );
+
   const completedTransactions = useMemo(
     () =>
-      [...transactions]
+      [...filteredTransactions]
         .filter((transaction) => transaction.status === "completed")
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()),
-    [transactions],
+    [filteredTransactions],
   );
 
-  const today = new Date();
-  const todayTransactions = completedTransactions.filter((transaction) =>
-    isSameDay(transaction.createdAt, today),
+  const pendingTransactions = filteredTransactions.filter(
+    (transaction) => transaction.status === "pending",
   );
-  const pendingTransactions = transactions.filter((transaction) => transaction.status === "pending");
-
-  const totalWeekRevenue = revenueData.reduce((acc, item) => acc + item.revenue, 0);
-  const transactionCount = completedTransactions.length;
-  const avgTicket = transactionCount > 0 ? totalWeekRevenue / transactionCount : 0;
-  const todayRevenue = todayTransactions.reduce((acc, transaction) => acc + transaction.amount, 0);
-
+  const periodRevenue = completedTransactions.reduce((acc, transaction) => acc + transaction.amount, 0);
+  const completedCount = completedTransactions.length;
+  const avgTicket = completedCount > 0 ? periodRevenue / completedCount : 0;
   const paymentBreakdown = Object.entries(
     completedTransactions.reduce<Record<PaymentMethod, { amount: number; count: number }>>(
       (acc, transaction) => {
@@ -98,39 +215,84 @@ export default function FinancialPage() {
     .map(([method, summary]) => ({
       method: method as PaymentMethod,
       ...summary,
-      share: totalWeekRevenue > 0 ? (summary.amount / totalWeekRevenue) * 100 : 0,
+      share: periodRevenue > 0 ? (summary.amount / periodRevenue) * 100 : 0,
     }))
     .filter((item) => item.amount > 0 || item.count > 0)
     .sort((left, right) => right.amount - left.amount);
 
+  const chartData = useMemo(
+    () => buildRevenueChartData(completedTransactions, activeRange.start, activeRange.end),
+    [activeRange.end, activeRange.start, completedTransactions],
+  );
+
+  const periodLabel = getPeriodLabel(selectedPeriod, customRange);
+  const rangeLabel = `${format(activeRange.start, "dd/MM/yyyy")} - ${format(activeRange.end, "dd/MM/yyyy")}`;
+
   const handleExport = () => {
-    const rows = [
-      ["recibo", "placa", "cliente", "valor", "pagamento", "status", "duracao_min", "criado_em"],
-      ...transactions.map((transaction) => {
-        const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
-        return [
-          transaction.receiptNumber,
-          vehicle?.plate ?? "-",
-          vehicle?.clientName ?? "-",
-          transaction.amount.toFixed(2),
-          paymentMethodLabels[transaction.paymentMethod],
-          paymentStatusConfig[transaction.status].label,
-          String(transaction.duration),
-          formatDateTimeBR(transaction.createdAt),
-        ];
-      }),
+    const workbook = XLSX.utils.book_new();
+
+    const summaryRows = [
+      ["Relatorio Financeiro ValetTracker"],
+      [`Periodo: ${periodLabel}`],
+      [`Intervalo: ${rangeLabel}`],
+      [`Gerado em: ${formatDateTimeBR(new Date())}`],
+      [],
+      ["Indicador", "Valor"],
+      ["Receita do periodo", periodRevenue],
+      ["Transacoes concluidas", completedCount],
+      ["Ticket medio", avgTicket],
+      ["Transacoes pendentes", pendingTransactions.length],
     ];
 
-    const csv = rows
-      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `financeiro-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+    summarySheet["!cols"] = [{ wch: 28 }, { wch: 22 }];
+    summarySheet["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 1 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 1 } },
+    ];
+    ["B7", "B9"].forEach((cell) => {
+      if (summarySheet[cell]) {
+        summarySheet[cell].z = '"R$" #,##0.00';
+      }
+    });
+
+    const transactionRows = filteredTransactions.map((transaction) => {
+      const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+      return {
+        Recibo: transaction.receiptNumber,
+        Placa: vehicle?.plate ?? "-",
+        Cliente: vehicle?.clientName ?? "-",
+        Valor: transaction.amount,
+        Pagamento: paymentMethodLabels[transaction.paymentMethod],
+        Status: paymentStatusConfig[transaction.status].label,
+        "Duracao (min)": transaction.duration,
+        "Criado em": formatDateTimeBR(transaction.createdAt),
+      };
+    });
+
+    const transactionsSheet = XLSX.utils.json_to_sheet(transactionRows);
+    transactionsSheet["!cols"] = [
+      { wch: 18 },
+      { wch: 12 },
+      { wch: 24 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 22 },
+    ];
+    transactionRows.forEach((_row, index) => {
+      const cellAddress = XLSX.utils.encode_cell({ r: index + 1, c: 3 });
+      if (transactionsSheet[cellAddress]) {
+        transactionsSheet[cellAddress].z = '"R$" #,##0.00';
+      }
+    });
+
+    XLSX.utils.book_append_sheet(workbook, summarySheet, "Resumo");
+    XLSX.utils.book_append_sheet(workbook, transactionsSheet, "Transacoes");
+    XLSX.writeFile(workbook, `financeiro-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
 
   return (
@@ -144,10 +306,54 @@ export default function FinancialPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate("/")}>
-              <Calendar className="h-4 w-4" />
-              Ultimos 7 dias
-            </Button>
+            <Popover open={periodPopoverOpen} onOpenChange={setPeriodPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Calendar className="h-4 w-4" />
+                  {periodLabel}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[360px] space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-foreground">Filtrar periodo</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {periodOptions.map((option) => (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        variant={selectedPeriod === option.value ? "default" : "outline"}
+                        className="justify-start"
+                        onClick={() => {
+                          setSelectedPeriod(option.value);
+                          if (option.value !== "custom") {
+                            setPeriodPopoverOpen(false);
+                          }
+                        }}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {selectedPeriod === "custom" && (
+                  <div className="rounded-lg border border-border">
+                    <DatePickerCalendar
+                      mode="range"
+                      numberOfMonths={1}
+                      selected={customRange}
+                      onSelect={setCustomRange}
+                      locale={ptBR}
+                    />
+                  </div>
+                )}
+
+                <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                  Intervalo ativo: {rangeLabel}
+                </div>
+              </PopoverContent>
+            </Popover>
+
             <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
               <Download className="h-4 w-4" />
               Exportar
@@ -161,41 +367,52 @@ export default function FinancialPage() {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            title="Receita Hoje"
-            value={formatCurrencyBRL(todayRevenue || dashboardStats?.todayRevenue || 0)}
+            title={`Receita - ${periodLabel}`}
+            value={formatCurrencyBRL(periodRevenue)}
+            subtitle={rangeLabel}
             icon={DollarSign}
-            trend={{ value: todayTransactions.length, isPositive: true }}
             variant="success"
           />
           <StatCard
-            title="Receita Semanal"
-            value={formatCurrencyBRL(totalWeekRevenue)}
+            title="Transacoes concluidas"
+            value={completedCount}
+            subtitle={periodLabel}
             icon={TrendingUp}
-            trend={{ value: transactionCount, isPositive: true }}
             variant="primary"
           />
-          <StatCard title="Ticket Medio" value={formatCurrencyBRL(avgTicket)} icon={Receipt} variant="info" />
           <StatCard
-            title="Transacoes Pendentes"
+            title="Ticket medio"
+            value={formatCurrencyBRL(avgTicket)}
+            subtitle="Media por pagamento concluido"
+            icon={Receipt}
+            variant="info"
+          />
+          <StatCard
+            title="Transacoes pendentes"
             value={pendingTransactions.length}
+            subtitle={periodLabel}
             icon={CreditCard}
-            trend={{ value: transactionCount, isPositive: true }}
             variant={pendingTransactions.length > 0 ? "warning" : "default"}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <RevenueChart data={revenueData} />
+            <RevenueChart
+              data={chartData}
+              title={`Receita - ${periodLabel}`}
+              subtitle={rangeLabel}
+              summaryNote={`${completedCount} pagamento(s) concluido(s)`}
+            />
           </div>
 
           <div className="stat-card">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-foreground">Por Forma de Pagamento</h3>
-                <p className="text-sm text-muted-foreground">Resumo pelas transacoes concluidas</p>
+                <p className="text-sm text-muted-foreground">Resumo do periodo filtrado</p>
               </div>
-              <Badge variant="outline">{transactionCount} pagamentos</Badge>
+              <Badge variant="outline">{completedCount} pagamentos</Badge>
             </div>
             <div className="space-y-4">
               {paymentBreakdown.length > 0 ? (
@@ -227,7 +444,7 @@ export default function FinancialPage() {
               <div>
                 <h3 className="font-semibold text-foreground">Transacoes Recentes</h3>
                 <p className="text-sm text-muted-foreground">
-                  Pagamentos ligados ao fluxo de saida e cadastro de veiculos
+                  Lista atualizada pelo mesmo filtro de periodo
                 </p>
               </div>
               <Button
@@ -253,7 +470,7 @@ export default function FinancialPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((transaction) => {
+                  {filteredTransactions.map((transaction) => {
                     const status = paymentStatusConfig[transaction.status];
                     const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
 
@@ -307,6 +524,11 @@ export default function FinancialPage() {
                   })}
                 </tbody>
               </table>
+              {filteredTransactions.length === 0 && (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  Nenhuma transacao encontrada para o periodo selecionado.
+                </div>
+              )}
             </div>
           </div>
 

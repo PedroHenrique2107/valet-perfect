@@ -4,6 +4,9 @@ import type { RevenueData } from "@/types/valet";
 
 interface RevenueChartProps {
   data: RevenueData[];
+  title?: string;
+  subtitle?: string;
+  summaryNote?: string;
 }
 
 interface RevenueTooltipProps {
@@ -21,24 +24,29 @@ function CustomTooltip({ active, payload, label }: RevenueTooltipProps) {
     <div className="rounded-lg border border-border bg-popover p-3 shadow-lg">
       <p className="mb-1 text-sm font-medium text-foreground">{label}</p>
       <p className="text-lg font-bold text-primary">{formatCurrencyBRL(payload[0].value)}</p>
-      <p className="text-xs text-muted-foreground">{payload[0].payload.transactions} transações</p>
+      <p className="text-xs text-muted-foreground">{payload[0].payload.transactions} transacoes</p>
     </div>
   );
 }
 
-export function RevenueChart({ data }: RevenueChartProps) {
+export function RevenueChart({
+  data,
+  title = "Receita Semanal",
+  subtitle = "Ultimos 7 dias",
+  summaryNote = "+12.5% vs semana anterior",
+}: RevenueChartProps) {
   return (
     <div className="stat-card h-[300px]">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-foreground">Receita Semanal</h3>
-          <p className="text-sm text-muted-foreground">Últimos 7 dias</p>
+          <h3 className="font-semibold text-foreground">{title}</h3>
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
         </div>
         <div className="text-right">
           <p className="text-2xl font-bold text-foreground">
             {formatCurrencyBRL(data.reduce((acc, item) => acc + item.revenue, 0))}
           </p>
-          <p className="text-sm text-success">+12.5% vs semana anterior</p>
+          <p className="text-sm text-success">{summaryNote}</p>
         </div>
       </div>
       <ResponsiveContainer width="100%" height="80%">
