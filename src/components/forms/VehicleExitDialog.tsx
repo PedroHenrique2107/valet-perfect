@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -68,16 +68,20 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
   const selectedVehicle = activeVehicles.find((vehicle) => vehicle.id === form.watch("vehicleId"));
   const durationSeconds = selectedVehicle ? Math.max(1, Math.floor((now - selectedVehicle.entryTime.getTime()) / 1000)) : 0;
   const durationMinutes = Math.max(1, Math.ceil(durationSeconds / 60));
+  const recurringCurrent = selectedVehicle?.linkedClientId && selectedVehicle.billingStatusAtEntry === "current";
+  const recurringOverdue = selectedVehicle?.linkedClientId && selectedVehicle.billingStatusAtEntry === "overdue";
 
   const pricing = useMemo(() => {
     if (!selectedVehicle) return { gross: 0, discount: 0, net: 0 };
+    if (recurringCurrent) return { gross: 0, discount: 0, net: 0 };
+    if (recurringOverdue) return calculateAmountByDuration(durationMinutes, "none");
     return calculateAmountByDuration(durationMinutes, form.watch("agreementId"));
-  }, [durationMinutes, form, selectedVehicle]);
+  }, [durationMinutes, form, recurringCurrent, recurringOverdue, selectedVehicle]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     await registerExit.mutateAsync({
       vehicleId: values.vehicleId,
-      paymentMethod: values.paymentMethod,
+      paymentMethod: recurringCurrent ? "monthly" : values.paymentMethod,
       amount: pricing.net,
     });
     form.reset({ vehicleId: initialVehicleId ?? "", paymentMethod: "pix", agreementId: "none" });
@@ -117,40 +121,59 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
               <p><strong>Cliente:</strong> {selectedVehicle.clientName}</p>
               <p><strong>Telefone:</strong> {selectedVehicle.clientPhone || "-"}</p>
               <p><strong>Tempo registrado:</strong> {formatDurationPrecise(durationSeconds)}</p>
+              {selectedVehicle.linkedClientId ? (
+                <p>
+                  <strong>Status da mensalidade:</strong>{" "}
+                  {selectedVehicle.billingStatusAtEntry === "current" ? "Em dia" : "Vencida"}
+                </p>
+              ) : null}
             </div>
           )}
 
-          <Select
-            value={form.watch("agreementId")}
-            onValueChange={(value) => form.setValue("agreementId", value, { shouldValidate: true })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Convenio" />
-            </SelectTrigger>
-            <SelectContent>
-              {AGREEMENT_OPTIONS.map((agreement) => (
-                <SelectItem key={agreement.id} value={agreement.id}>
-                  {agreement.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!recurringCurrent && !recurringOverdue && (
+            <Select
+              value={form.watch("agreementId")}
+              onValueChange={(value) => form.setValue("agreementId", value, { shouldValidate: true })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Convenio" />
+              </SelectTrigger>
+              <SelectContent>
+                {AGREEMENT_OPTIONS.map((agreement) => (
+                  <SelectItem key={agreement.id} value={agreement.id}>
+                    {agreement.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
-          <Select
-            value={form.watch("paymentMethod")}
-            onValueChange={(value) => form.setValue("paymentMethod", value as FormValues["paymentMethod"], { shouldValidate: true })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Forma de pagamento" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pix">PIX</SelectItem>
-              <SelectItem value="credit">Credito</SelectItem>
-              <SelectItem value="debit">Debito</SelectItem>
-              <SelectItem value="cash">Dinheiro</SelectItem>
-              <SelectItem value="monthly" disabled className="line-through">Mensalista (em breve)</SelectItem>
-            </SelectContent>
-          </Select>
+          {!recurringCurrent && (
+            <Select
+              value={form.watch("paymentMethod")}
+              onValueChange={(value) => form.setValue("paymentMethod", value as FormValues["paymentMethod"], { shouldValidate: true })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Forma de pagamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pix">PIX</SelectItem>
+                <SelectItem value="credit">Credito</SelectItem>
+                <SelectItem value="debit">Debito</SelectItem>
+                <SelectItem value="cash">Dinheiro</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+
+          {recurringCurrent ? (
+            <div className="rounded-md border border-success/40 bg-success/5 p-3 text-xs">
+              <p><strong>Saida isenta:</strong> este veiculo esta com a mensalidade em dia.</p>
+            </div>
+          ) : recurringOverdue ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs">
+              <p><strong>Mensalidade vencida:</strong> a cobranca sera feita como avulso.</p>
+            </div>
+          ) : null}
 
           <div className="rounded-md border bg-muted/30 p-3 text-xs">
             <p>Valor bruto: {formatCurrencyBRL(pricing.gross)}</p>

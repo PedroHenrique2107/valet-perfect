@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -24,9 +24,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateVehicleMutation, useParkingSpotsQuery } from "@/hooks/useValetData";
+import { useClientsQuery, useCreateVehicleMutation, useParkingSpotsQuery } from "@/hooks/useValetData";
+import { useToast } from "@/hooks/use-toast";
 import { formatCurrencyBRL } from "@/lib/format";
-import type { ContractType } from "@/types/valet";
+import type { Client, ContractType } from "@/types/valet";
 
 const standardPlateRegex = /^[A-Z]{3}-\d{4}$/;
 const mercosulPlateRegex = /^[A-Z]{3}\d[A-Z]\d{2}$/;
@@ -150,9 +151,26 @@ function formatPhone(value: string): string {
   return `(${ddd}) ${firstPart}-${secondPart}`;
 }
 
+function normalizePlateLookup(value: string) {
+  return value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+}
+
+function findClientByPlate(clients: Client[], plate: string) {
+  const normalized = normalizePlateLookup(plate);
+  return clients.find((client) =>
+    client.vehicles.some((registeredPlate) => normalizePlateLookup(registeredPlate) === normalized),
+  );
+}
+
+function isBillingOverdue(client: Client) {
+  return client.billingDueDate.getTime() < Date.now();
+}
+
 export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogProps) {
   const createVehicle = useCreateVehicleMutation();
   const { data: parkingSpots = [] } = useParkingSpotsQuery();
+  const { data: clients = [] } = useClientsQuery();
+  const { toast } = useToast();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [prepaidSelection, setPrepaidSelection] = useState<PrepaidChargeSelection | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -187,12 +205,24 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
   const phone = form.watch("clientPhone") ?? "";
   const prepaidEnabled = form.watch("prepaidEnabled");
   const createInspection = form.watch("createInspection");
-  const availableSpots = parkingSpots.filter((spot) => spot.status === "available");
+  const matchedClient = useMemo(() => findClientByPlate(clients, plate), [clients, plate]);
+  const matchedClientOverdue = matchedClient ? isBillingOverdue(matchedClient) : false;
+  const availableSpots = useMemo(() => {
+    const available = parkingSpots.filter((spot) => spot.status === "available");
+    return matchedClient?.isVip ? available.filter((spot) => spot.type === "vip") : available;
+  }, [matchedClient?.isVip, parkingSpots]);
+
+  useEffect(() => {
+    if (!matchedClient) return;
+    form.setValue("clientName", matchedClient.name, { shouldValidate: true });
+    form.setValue("clientPhone", matchedClient.phone, { shouldValidate: true });
+    form.setValue("contractType", matchedClient.category as ContractType, { shouldValidate: true });
+  }, [form, matchedClient]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
     try {
-      await createVehicle.mutateAsync({
+      const createdVehicle = await createVehicle.mutateAsync({
         plate: values.plate,
         spotId: values.spotId,
         model: values.model,
@@ -220,6 +250,17 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
         prepaidAgreementId: values.prepaidEnabled ? prepaidSelection?.agreementId : "none",
         prepaidPaymentMethod: values.prepaidEnabled ? prepaidSelection?.paymentMethod : undefined,
       });
+
+      if (createdVehicle.linkedClientId) {
+        toast({
+          title: createdVehicle.billingStatusAtEntry === "current" ? "Mensalidade em dia" : "Mensalidade vencida",
+          description:
+            createdVehicle.billingStatusAtEntry === "current"
+              ? `${createdVehicle.plate} reconhecido. A saida sera isenta.`
+              : `${createdVehicle.plate} reconhecido, mas a mensalidade esta vencida. A saida sera cobrada como avulso.`,
+          variant: createdVehicle.billingStatusAtEntry === "current" ? "default" : "destructive",
+        });
+      }
 
       form.reset();
       setPrepaidSelection(null);
@@ -284,15 +325,16 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
 
               <div className="space-y-2">
                 <Label htmlFor="clientName">Nome do Cliente *</Label>
-                <Input id="clientName" placeholder="Nome do cliente" {...form.register("clientName")} />
+                <Input id="clientName" placeholder="Nome do cliente" {...form.register("clientName")} readOnly={Boolean(matchedClient)} />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="clientPhone">Telefone do Cliente</Label>
                 <Input
                   id="clientPhone"
-                  placeholder="(11) 12345-6789"
+                  placeholder="(19) 99999-9999"
                   value={phone}
+                  readOnly={Boolean(matchedClient)}
                   onChange={(event) => form.setValue("clientPhone", formatPhone(event.target.value), { shouldValidate: true })}
                 />
               </div>
@@ -313,11 +355,26 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
               </div>
             </div>
 
+            {matchedClient ? (
+              <div className={matchedClientOverdue ? "rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm" : "rounded-md border border-success/40 bg-success/5 p-3 text-sm"}>
+                <p className="font-medium text-foreground">
+                  Placa reconhecida como {matchedClient.category === "monthly" ? "mensalista" : "credenciado"}
+                  {matchedClient.isVip ? " VIP" : ""}.
+                </p>
+                <p className="text-muted-foreground">
+                  {matchedClientOverdue
+                    ? "Mensalidade vencida. A entrada e permitida, mas a saida sera cobrada como avulso."
+                    : "Mensalidade em dia. A saida sera isenta de cobranca."}
+                </p>
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               <Label>Tipo de contrato</Label>
               <Select
                 value={form.watch("contractType")}
                 onValueChange={(value) => form.setValue("contractType", value as FormValues["contractType"], { shouldValidate: true })}
+                disabled={Boolean(matchedClient)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Tipo de contrato" />
@@ -325,8 +382,8 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                 <SelectContent>
                   <SelectItem value="hourly">Avulso</SelectItem>
                   <SelectItem value="daily">Avulso (diaria)</SelectItem>
-                  <SelectItem value="agreement">Credenciado</SelectItem>
-                  <SelectItem value="monthly" disabled className="line-through">Mensalista (em breve)</SelectItem>
+                  {!matchedClient ? <SelectItem value="agreement">Credenciado manual</SelectItem> : null}
+                  {!matchedClient ? <SelectItem value="monthly">Mensalista manual</SelectItem> : null}
                 </SelectContent>
               </Select>
             </div>

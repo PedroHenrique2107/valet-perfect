@@ -12,15 +12,21 @@ import { // Config and helpers
   PARKING_OPTIONS,
 } from "@/config/parkings";
 import { // Pricing config
+  AGREEMENT_STANDARD_SPOT_RATE,
   DEFAULT_UNIT_NAME,
+  MONTHLY_STANDARD_RATE,
   PARKING_DAILY_RATE,
   PARKING_TABLE_NAME,
+  calculateAgreementClientFee,
+  calculateMonthlyClientFee,
   getAgreementById,
 } from "@/config/pricing"; 
 import type { // Types and interfaces
   Activity,
   Attendant,
+  BillingStatus,
   Client,
+  ClientCategory,
   ContractType,
   DashboardStats,
   OccupancyData,
@@ -114,8 +120,13 @@ export interface CreateClientInput {
   email: string; // Email do cliente
   phone: string; // Telefone do cliente
   cpf?: string; // CPF do cliente (opcional)
+  cnpj?: string; // CNPJ da empresa credenciada
   category: Client["category"];
-  tier: Client["tier"]; // Nível de fidelidade do cliente (ex: bronze, silver, gold)
+  isVip?: boolean;
+  includedSpots?: number;
+  vipSpots?: number;
+  vehicles: string[];
+  billingDueDate: string;
 }
 
 // Tipo de entrada para criar um novo manobrista
@@ -177,6 +188,21 @@ function normalizeSpotCode(code: string): string {
   return code.trim().toUpperCase();
 }
 
+function normalizeDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function normalizePlate(value: string) {
+  return value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+}
+
+function normalizeClientVehiclePlates(vehicles: string[]) {
+  return vehicles
+    .map((plate) => plate.trim().toUpperCase())
+    .filter(Boolean)
+    .filter((plate, index, all) => all.indexOf(plate) === index);
+}
+
 function normalizeSection(section: string): string {
   return section.trim().toUpperCase();
 }
@@ -187,6 +213,38 @@ function getNextFloorNumber() {
 
 function buildGeneratedSpotCode(floor: number, section: string, index: number) {
   return `P${floor}-${section}-${String(index).padStart(2, "0")}`;
+}
+
+function isClientBillingOverdue(client: Client, now: Date = new Date()): boolean {
+  return client.billingDueDate.getTime() < now.getTime();
+}
+
+function findClientByPlate(plate: string): Client | undefined {
+  const normalizedPlate = normalizePlate(plate);
+  return clientsDb.find((client) =>
+    client.vehicles.some((registeredPlate) => normalizePlate(registeredPlate) === normalizedPlate),
+  );
+}
+
+function buildRecurringAccessSnapshot(client: Client | undefined) {
+  if (!client) {
+    return {
+      linkedClientId: undefined,
+      recurringClientCategory: undefined,
+      billingStatusAtEntry: undefined,
+      vipRequired: false,
+      exemptFromCharge: false,
+    };
+  }
+
+  const billingStatusAtEntry: BillingStatus = isClientBillingOverdue(client) ? "overdue" : "current";
+  return {
+    linkedClientId: client.id,
+    recurringClientCategory: client.category,
+    billingStatusAtEntry,
+    vipRequired: client.isVip,
+    exemptFromCharge: billingStatusAtEntry === "current",
+  };
 }
 
 function ensureUniqueSpotCode(code: string, currentSpotId?: string) {
@@ -396,6 +454,12 @@ export const valetApi = {
       throw new Error("A vaga selecionada nao esta disponivel");
     }
 
+    const linkedClient = findClientByPlate(normalizedPlate);
+    const recurringAccess = buildRecurringAccessSnapshot(linkedClient);
+    if (recurringAccess.vipRequired && selectedSpot.type !== "vip") {
+      throw new Error("Cliente VIP deve ser estacionado em uma vaga VIP");
+    }
+
     const onlineAttendant = attendantsDb.find(
       (attendant) => attendant.isOnline && attendant.status === "online",
     );
@@ -423,10 +487,10 @@ export const valetApi = {
       entryTime: new Date(), // Data e hora de entrada do veículo, definida como o momento atual
       spotId: selectedSpot.code, // Código da vaga onde o veículo está estacionado, fornecido na entrada 
       attendantId: onlineAttendant.id, // ID do manobrista online que está associado ao veículo, para fins de atribuição de tarefas e monitoramento de desempenho
-      clientName: input.clientName, // Nome do cliente proprietário do veículo, fornecido na entrada
-      clientPhone: input.clientPhone ?? "", // Telefone do cliente, fornecido na entrada ou definido como string vazia se não for fornecido
+      clientName: linkedClient?.name ?? input.clientName, // Nome do cliente proprietário do veículo, fornecido na entrada
+      clientPhone: linkedClient?.phone ?? input.clientPhone ?? "", // Telefone do cliente, fornecido na entrada ou definido como string vazia se não for fornecido
       observations: input.observations, // Observações adicionais sobre o veículo ou serviço, fornecidas na entrada (opcional)
-      contractType: input.contractType ?? "hourly", // Tipo de contrato para o serviço, fornecido na entrada ou definido como "hourly" (por hora) se não for fornecido
+      contractType: linkedClient?.category ?? input.contractType ?? "hourly", // Tipo de contrato para o serviço, fornecido na entrada ou definido como "hourly" (por hora) se não for fornecido
       unitName: input.unitName ?? DEFAULT_UNIT_NAME, // Nome da unidade de cobrança, fornecido na entrada ou definido como DEFAULT_UNIT_NAME se não for fornecido
       spotHistory: [
         {
@@ -451,7 +515,11 @@ export const valetApi = {
           })
         : undefined,
       pricing,
-      
+      linkedClientId: recurringAccess.linkedClientId,
+      recurringClientCategory: recurringAccess.recurringClientCategory,
+      billingStatusAtEntry: recurringAccess.billingStatusAtEntry,
+      vipRequired: recurringAccess.vipRequired,
+      exemptFromCharge: recurringAccess.exemptFromCharge,
       prepaidPaid: (input.prepaidAmount ?? 0) > 0,
     };
 
@@ -486,6 +554,17 @@ export const valetApi = {
       time: "agora",
       plate: newVehicle.plate,
     });
+
+    if (linkedClient) {
+      createActivity({
+        id: createId("act"),
+        type: recurringAccess.exemptFromCharge ? "payment" : "alert",
+        title: recurringAccess.exemptFromCharge ? "Mensalidade em Dia" : "Mensalidade Vencida",
+        description: `${linkedClient.name} - ${newVehicle.plate}`,
+        time: "agora",
+        plate: newVehicle.plate,
+      });
+    }
 
     return simulateNetwork(newVehicle);
   },
@@ -532,6 +611,9 @@ export const valetApi = {
     }
     if (targetSpot.status !== "available") {
       throw new Error("A vaga selecionada não está disponível");
+    }
+    if (vehicle.vipRequired && targetSpot.type !== "vip") {
+      throw new Error("Veiculo VIP deve permanecer em vaga VIP");
     }
 
     const previousSpot = parkingSpotsDb.find((spot) => spot.code === vehicle.spotId);
@@ -867,11 +949,13 @@ export const valetApi = {
     }
 
     // Cria uma transação de pagamento para a estadia do veículo, associando-a ao veículo e registrando o valor cobrado, o método de pagamento, e gerando um número de recibo único. O valor cobrado é fornecido na entrada, mas poderia ser calculado com base na duração da estadia e nas tarifas aplicáveis usando o snapshot de precificação armazenado no veículo.
+    const actualAmount = vehicle.linkedClientId && vehicle.billingStatusAtEntry === "current" ? 0 : input.amount;
+
     transactionsDb.unshift({
       id: createId("t"),
       vehicleId: vehicle.id,
-      amount: input.amount,
-      paymentMethod: input.paymentMethod,
+      amount: actualAmount,
+      paymentMethod: actualAmount === 0 ? "monthly" : input.paymentMethod,
       status: "completed",
       createdAt: new Date(),
       completedAt: new Date(),
@@ -879,15 +963,18 @@ export const valetApi = {
       duration,
     });
 
-    const linkedClient = clientsDb.find(
-      (client) =>
-        client.name.trim().toLowerCase() === vehicle.clientName.trim().toLowerCase() ||
-        (vehicle.clientPhone &&
-          client.phone.replace(/\D/g, "") === vehicle.clientPhone.replace(/\D/g, "")),
-    );
+    const linkedClient =
+      clientsDb.find((client) => client.id === vehicle.linkedClientId) ??
+      findClientByPlate(vehicle.plate) ??
+      clientsDb.find(
+        (client) =>
+          client.name.trim().toLowerCase() === vehicle.clientName.trim().toLowerCase() ||
+          (vehicle.clientPhone &&
+            normalizeDigits(client.phone) === normalizeDigits(vehicle.clientPhone)),
+      );
     if (linkedClient) {
       linkedClient.totalVisits += 1;
-      linkedClient.totalSpent += input.amount;
+      linkedClient.totalSpent += actualAmount;
       if (!linkedClient.vehicles.includes(vehicle.plate)) {
         linkedClient.vehicles.push(vehicle.plate);
       }
@@ -895,9 +982,12 @@ export const valetApi = {
 
     createActivity({
       id: createId("act"),
-      type: "payment",
-      title: "Pagamento Recebido",
-      description: `${input.paymentMethod.toUpperCase()} de R$ ${input.amount.toFixed(2)} - ${vehicle.clientName}`,
+      type: actualAmount === 0 ? "payment" : "payment",
+      title: actualAmount === 0 ? "Saida Isenta" : "Pagamento Recebido",
+      description:
+        actualAmount === 0
+          ? `${vehicle.clientName} saiu sem cobranca por mensalidade em dia`
+          : `${input.paymentMethod.toUpperCase()} de R$ ${actualAmount.toFixed(2)} - ${vehicle.clientName}`,
       time: "agora",
       plate: vehicle.plate,
     });
@@ -947,15 +1037,51 @@ export const valetApi = {
 
   // Cria um novo cliente e o adiciona à base de dados, registrando uma atividade de cadastro para monitoramento e histórico do sistema. Retorna o novo cliente criado após simular a latência de rede.
   createClient: async (input: CreateClientInput): Promise<Client> => {
+    const normalizedVehicles = normalizeClientVehiclePlates(input.vehicles);
+    if (normalizedVehicles.length === 0) {
+      throw new Error("Cadastre ao menos um veiculo para o cliente");
+    }
+
+    const duplicatedPlate = normalizedVehicles.find((plate) =>
+      clientsDb.some((client) => client.vehicles.some((registeredPlate) => normalizePlate(registeredPlate) === normalizePlate(plate))),
+    );
+    if (duplicatedPlate) {
+      throw new Error(`A placa ${duplicatedPlate} ja esta vinculada a outro cliente`);
+    }
+
+    if (input.category === "monthly" && normalizedVehicles.length > 3) {
+      throw new Error("Mensalista pode cadastrar ate 3 veiculos");
+    }
+
+    if (input.category === "agreement" && !input.cnpj?.trim()) {
+      throw new Error("Credenciado precisa informar um CNPJ");
+    }
+
+    const includedSpots = input.category === "monthly" ? 1 : Math.max(1, input.includedSpots ?? 1);
+    const vipSpots =
+      input.category === "monthly"
+        ? (input.isVip ? 1 : 0)
+        : Math.min(Math.max(0, input.vipSpots ?? 0), includedSpots);
+    const isVip = input.category === "monthly" ? Boolean(input.isVip) : vipSpots > 0;
+    const monthlyFee =
+      input.category === "monthly"
+        ? calculateMonthlyClientFee(isVip)
+        : calculateAgreementClientFee(includedSpots, vipSpots);
+
     const client: Client = {
       id: createId("c"),
       name: input.name,
       email: input.email,
       phone: input.phone,
       cpf: input.cpf,
-      vehicles: [],
+      cnpj: input.cnpj,
+      vehicles: normalizedVehicles,
       category: input.category,
-      tier: input.tier,
+      isVip,
+      includedSpots,
+      vipSpots,
+      monthlyFee,
+      billingDueDate: new Date(input.billingDueDate),
       totalVisits: 0,
       totalSpent: 0,
       cashback: 0,
@@ -969,7 +1095,7 @@ export const valetApi = {
       id: createId("act"),
       type: "entry",
       title: "Novo Cliente",
-      description: `${client.name} foi cadastrado`,
+      description: `${client.name} foi cadastrado com mensalidade de R$ ${client.monthlyFee.toFixed(2)}`,
       time: "agora",
     });
 

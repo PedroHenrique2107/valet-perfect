@@ -2,6 +2,8 @@
 
 export type VehicleStatus = 'parked' | 'requested' | 'in_transit' | 'delivered' | 'reserved';
 export type ContractType = "hourly" | "daily" | "monthly" | "agreement";
+export type ClientCategory = "agreement" | "monthly";
+export type BillingStatus = "current" | "overdue";
 
 export type AttendantStatus = "online" | "offline" | "lunch" | "dinner" | "commuting";
 
@@ -34,6 +36,11 @@ export interface Vehicle {
   inspection?: VehicleInspection;
   pricing?: VehiclePricingSnapshot;
   prepaidPaid?: boolean;
+  linkedClientId?: string;
+  recurringClientCategory?: ClientCategory;
+  billingStatusAtEntry?: BillingStatus;
+  vipRequired?: boolean;
+  exemptFromCharge?: boolean;
 }
 
 export interface SpotHistoryEntry {
@@ -159,9 +166,14 @@ export interface Client {
   email: string;
   phone: string;
   cpf?: string;
+  cnpj?: string;
   vehicles: string[];
-  category: "agreement" | "monthly";
-  tier: 'bronze' | 'silver' | 'gold' | 'diamond';
+  category: ClientCategory;
+  isVip: boolean;
+  includedSpots: number;
+  vipSpots: number;
+  monthlyFee: number;
+  billingDueDate: Date;
   totalVisits: number;
   totalSpent: number;
   cashback: number;

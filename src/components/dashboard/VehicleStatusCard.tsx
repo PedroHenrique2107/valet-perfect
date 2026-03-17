@@ -86,7 +86,24 @@ export function VehicleStatusCard({
             <h3 className="font-mono text-base font-bold text-foreground truncate">{vehicle.plate}</h3>
             <p className="text-xs text-muted-foreground truncate">{vehicle.model} - {vehicle.clientName}</p>
             <div className="mt-1 flex items-center gap-2">
-              <span className={cn("text-xs", vehicle.contractType === "monthly" && "line-through")}>{contractLabel[vehicle.contractType ?? "hourly"]}</span>
+              <span className="text-xs">{contractLabel[vehicle.contractType ?? "hourly"]}</span>
+              {vehicle.vipRequired ? (
+                <span className="inline-flex items-center rounded bg-warning px-1.5 py-0.5 text-[10px] font-semibold text-warning-foreground">
+                  VIP
+                </span>
+              ) : null}
+              {vehicle.linkedClientId ? (
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                    vehicle.billingStatusAtEntry === "current"
+                      ? "bg-success/15 text-success"
+                      : "bg-destructive/15 text-destructive",
+                  )}
+                >
+                  {vehicle.billingStatusAtEntry === "current" ? "Em dia" : "Vencido"}
+                </span>
+              ) : null}
               {vehicle.prepaidPaid ? (
                 <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
                   <CircleDollarSign className="h-3 w-3" />
@@ -156,7 +173,7 @@ export function VehicleStatusCard({
         </div>
       )}
 
-      {vehicle.observations?.toLowerCase().includes("vip") && (
+      {(vehicle.vipRequired || vehicle.observations?.toLowerCase().includes("vip")) && (
         <div className="absolute right-0 top-0 rounded-bl-lg rounded-tr-lg bg-warning px-2 py-0.5 text-[10px] font-bold text-warning-foreground">
           VIP
         </div>

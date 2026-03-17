@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import {
   Building2,
+  CalendarClock,
   CreditCard,
   Mail,
   Phone,
   Plus,
   Search,
+  ShieldCheck,
   Star,
   UserCircle,
 } from "lucide-react";
@@ -27,17 +29,9 @@ const categoryLabels: Record<Client["category"], string> = {
   monthly: "Mensalista",
 };
 
-const tierLabels: Record<Client["tier"], string> = {
-  bronze: "Bronze",
-  silver: "Prata",
-  gold: "Ouro",
-  diamond: "Diamante",
-};
-
-const categoryAccent: Record<Client["category"], string> = {
-  agreement: "border-info/50 bg-info/10 text-info",
-  monthly: "border-primary/50 bg-primary/10 text-primary",
-};
+function isOverdue(client: Client) {
+  return client.billingDueDate.getTime() < Date.now();
+}
 
 export default function ClientsPage() {
   const { data: clients = [] } = useClientsQuery();
@@ -48,7 +42,6 @@ export default function ClientsPage() {
 
   const filteredClients = useMemo(() => {
     const normalized = searchQuery.trim().toLowerCase();
-
     return clients.filter((client) => {
       const matchesCategory = categoryFilter === "all" || client.category === categoryFilter;
       const matchesSearch =
@@ -56,8 +49,8 @@ export default function ClientsPage() {
         client.name.toLowerCase().includes(normalized) ||
         client.email.toLowerCase().includes(normalized) ||
         client.phone.toLowerCase().includes(normalized) ||
-        client.vehicles.some((plate) => plate.toLowerCase().includes(normalized));
-
+        client.vehicles.some((plate) => plate.toLowerCase().includes(normalized)) ||
+        client.cnpj?.toLowerCase().includes(normalized);
       return matchesCategory && matchesSearch;
     });
   }, [categoryFilter, clients, searchQuery]);
@@ -67,7 +60,8 @@ export default function ClientsPage() {
       total: clients.length,
       agreement: clients.filter((client) => client.category === "agreement").length,
       monthly: clients.filter((client) => client.category === "monthly").length,
-      activeVehicles: clients.reduce((total, client) => total + client.vehicles.length, 0),
+      vip: clients.filter((client) => client.isVip).length,
+      overdue: clients.filter((client) => isOverdue(client)).length,
     }),
     [clients],
   );
@@ -79,7 +73,7 @@ export default function ClientsPage() {
           <div>
             <h1 className="text-3xl font-bold text-foreground">Clientes</h1>
             <p className="text-muted-foreground">
-              Central de cadastro com separacao entre credenciados e mensalistas.
+              Gestao de credenciados e mensalistas com frota vinculada, VIP e controle de vencimento.
             </p>
           </div>
           <Button
@@ -92,11 +86,12 @@ export default function ClientsPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <SummaryCard title="Total cadastrados" value={summary.total} icon={UserCircle} />
           <SummaryCard title="Credenciados" value={summary.agreement} icon={Building2} accent="info" />
           <SummaryCard title="Mensalistas" value={summary.monthly} icon={CreditCard} accent="primary" />
-          <SummaryCard title="Veiculos vinculados" value={summary.activeVehicles} icon={Star} accent="warning" />
+          <SummaryCard title="VIPs" value={summary.vip} icon={Star} accent="warning" />
+          <SummaryCard title="Vencidos" value={summary.overdue} icon={CalendarClock} accent="destructive" />
         </div>
 
         <div className="stat-card space-y-4">
@@ -104,7 +99,7 @@ export default function ClientsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome, email, telefone ou placa..."
+                placeholder="Buscar por nome, telefone, e-mail, placa ou CNPJ..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="pl-10"
@@ -122,15 +117,15 @@ export default function ClientsPage() {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <CategoryPanel
             title="Credenciados"
-            description="Clientes vinculados a convenio, parceiros ou operacoes recorrentes."
+            description="Empresas com quantidade de vagas e possibilidade de reservar vagas VIP."
             clients={filteredClients.filter((client) => client.category === "agreement")}
-            emptyMessage="Nenhum cliente credenciado encontrado com o filtro atual."
+            emptyMessage="Nenhum credenciado encontrado com o filtro atual."
           />
           <CategoryPanel
             title="Mensalistas"
-            description="Clientes com relacao recorrente de mensalidade e previsibilidade de receita."
+            description="Clientes pessoa fisica com ate 3 placas vinculadas e 1 vaga recorrente."
             clients={filteredClients.filter((client) => client.category === "monthly")}
-            emptyMessage="Nenhum cliente mensalista encontrado com o filtro atual."
+            emptyMessage="Nenhum mensalista encontrado com o filtro atual."
           />
         </div>
       </div>
@@ -160,56 +155,68 @@ function CategoryPanel({
 
       {clients.length > 0 ? (
         <div className="space-y-3">
-          {clients.map((client) => (
-            <article key={client.id} className="rounded-2xl border border-border/60 bg-background/40 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold text-foreground">{client.name}</h3>
-                    <Badge variant="outline" className={categoryAccent[client.category]}>
-                      {categoryLabels[client.category]}
-                    </Badge>
-                    <Badge variant="secondary">{tierLabels[client.tier]}</Badge>
+          {clients.map((client) => {
+            const overdue = isOverdue(client);
+
+            return (
+              <article key={client.id} className="rounded-2xl border border-border/60 bg-background/40 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-semibold text-foreground">{client.name}</h3>
+                      <Badge variant="outline">{categoryLabels[client.category]}</Badge>
+                      {client.isVip ? (
+                        <Badge className="gap-1 bg-warning text-warning-foreground">
+                          <Star className="h-3 w-3" />
+                          VIP
+                        </Badge>
+                      ) : null}
+                      <Badge variant="outline" className={cn(overdue ? "border-destructive/50 text-destructive" : "border-success/50 text-success")}>
+                        {overdue ? "Mensalidade vencida" : "Mensalidade em dia"}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      <p className="flex items-center gap-2">
+                        <Phone className="h-4 w-4" />
+                        {client.phone}
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        {client.email}
+                      </p>
+                      {client.cnpj ? (
+                        <p className="flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4" />
+                          CNPJ {client.cnpj}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
 
-                  <div className="space-y-1 text-sm text-muted-foreground">
-                    <p className="flex items-center gap-2">
-                      <Phone className="h-4 w-4" />
-                      {client.phone}
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <Mail className="h-4 w-4" />
-                      {client.email}
-                    </p>
+                  <div className="grid grid-cols-2 gap-2 text-sm sm:min-w-[240px]">
+                    <Metric label="Mensalidade" value={formatCurrencyBRL(client.monthlyFee)} />
+                    <Metric label="Vencimento" value={formatDateTimeBR(client.billingDueDate)} />
+                    <Metric label="Vagas" value={String(client.includedSpots)} />
+                    <Metric label="Vagas VIP" value={String(client.vipSpots)} />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-sm sm:min-w-[220px]">
-                  <Metric label="Visitas" value={String(client.totalVisits)} />
-                  <Metric label="Total gasto" value={formatCurrencyBRL(client.totalSpent)} />
-                  <Metric label="Cashback" value={formatCurrencyBRL(client.cashback)} />
-                  <Metric label="Cadastro" value={formatDateTimeBR(client.createdAt)} />
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-xl border border-border/50 bg-muted/15 p-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Veiculos vinculados
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {client.vehicles.length > 0 ? (
-                    client.vehicles.map((vehicle) => (
+                <div className="mt-4 rounded-xl border border-border/50 bg-muted/15 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Frota cadastrada
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {client.vehicles.map((vehicle) => (
                       <Badge key={vehicle} variant="outline">
                         {vehicle}
                       </Badge>
-                    ))
-                  ) : (
-                    <span className="text-sm text-muted-foreground">Nenhum veiculo vinculado.</span>
-                  )}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-border/60 p-6 text-sm text-muted-foreground">
@@ -229,7 +236,7 @@ function SummaryCard({
   title: string;
   value: number | string;
   icon: typeof UserCircle;
-  accent?: "default" | "primary" | "info" | "warning";
+  accent?: "default" | "primary" | "info" | "warning" | "destructive";
 }) {
   const accentClass =
     accent === "primary"
@@ -238,7 +245,9 @@ function SummaryCard({
         ? "bg-info/10 text-info"
         : accent === "warning"
           ? "bg-warning/10 text-warning"
-          : "bg-muted text-foreground";
+          : accent === "destructive"
+            ? "bg-destructive/10 text-destructive"
+            : "bg-muted text-foreground";
 
   return (
     <div className="stat-card flex items-center gap-4">
