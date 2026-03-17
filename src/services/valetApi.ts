@@ -126,7 +126,29 @@ export interface CreateClientInput {
   includedSpots?: number;
   vipSpots?: number;
   vehicles: string[];
-  billingDueDate: string;
+}
+
+export interface UpdateClientInput {
+  clientId: string;
+  name: string;
+  email: string;
+  phone: string;
+  cpf?: string;
+  cnpj?: string;
+  dueDay: number;
+  isVip?: boolean;
+  includedSpots?: number;
+  vipSpots?: number;
+}
+
+export interface AddClientVehicleInput {
+  clientId: string;
+  plate: string;
+}
+
+export interface ChargeClientInput {
+  clientId: string;
+  paymentMethod: Transaction["paymentMethod"];
 }
 
 // Tipo de entrada para criar um novo manobrista
@@ -147,6 +169,10 @@ export interface ClearAllVehiclesResult {
 
 export interface ClearAllAttendantsResult { 
   removedAttendants: number; // Número de manobristas removidos da base de dados
+}
+
+export interface ClearAllClientsResult {
+  removedClients: number;
 }
 
 const LATENCY_MS = 120; // 120 milissegundos de latência simulada para todas as operações da API
@@ -217,6 +243,25 @@ function buildGeneratedSpotCode(floor: number, section: string, index: number) {
 
 function isClientBillingOverdue(client: Client, now: Date = new Date()): boolean {
   return client.billingDueDate.getTime() < now.getTime();
+}
+
+function clampDayToMonth(year: number, monthIndex: number, day: number) {
+  return Math.min(day, new Date(year, monthIndex + 1, 0).getDate());
+}
+
+function buildInitialBillingDueDate(reference: Date) {
+  const nextMonthDate = new Date(reference);
+  nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
+  return nextMonthDate;
+}
+
+function buildNextBillingDueDate(currentDueDate: Date, dueDay: number) {
+  const nextMonth = new Date(currentDueDate);
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  const year = nextMonth.getFullYear();
+  const monthIndex = nextMonth.getMonth();
+  const safeDay = clampDayToMonth(year, monthIndex, dueDay);
+  return new Date(year, monthIndex, safeDay);
 }
 
 function findClientByPlate(plate: string): Client | undefined {
@@ -434,6 +479,20 @@ export const valetApi = {
     });
 
     return simulateNetwork({ removedVehicles });
+  },
+  clearAllClients: async (): Promise<ClearAllClientsResult> => {
+    const removedClients = clientsDb.length;
+    clientsDb.splice(0, clientsDb.length);
+
+    createActivity({
+      id: createId("act"),
+      type: "alert",
+      title: "Base de Clientes Limpa",
+      description: `${removedClients} cliente(s) removido(s) para testes`,
+      time: "agora",
+    });
+
+    return simulateNetwork({ removedClients });
   },
 
   // Cria um novo veículo e o adiciona à base de dados, associando-o a uma vaga disponível e a um manobrista online. Verifica se já existe um veículo ativo com a mesma placa, se a vaga selecionada está
@@ -1067,6 +1126,8 @@ export const valetApi = {
       input.category === "monthly"
         ? calculateMonthlyClientFee(isVip)
         : calculateAgreementClientFee(includedSpots, vipSpots);
+    const createdAt = new Date();
+    const billingDueDate = buildInitialBillingDueDate(createdAt);
 
     const client: Client = {
       id: createId("c"),
@@ -1081,11 +1142,12 @@ export const valetApi = {
       includedSpots,
       vipSpots,
       monthlyFee,
-      billingDueDate: new Date(input.billingDueDate),
+      billingDueDay: billingDueDate.getDate(),
+      billingDueDate,
       totalVisits: 0,
       totalSpent: 0,
       cashback: 0,
-      createdAt: new Date(),
+      createdAt,
     };
 
     clientsDb.unshift(client);
@@ -1096,6 +1158,113 @@ export const valetApi = {
       type: "entry",
       title: "Novo Cliente",
       description: `${client.name} foi cadastrado com mensalidade de R$ ${client.monthlyFee.toFixed(2)}`,
+      time: "agora",
+    });
+
+    return simulateNetwork(client);
+  },
+
+  updateClient: async (input: UpdateClientInput): Promise<Client> => {
+    const client = clientsDb.find((item) => item.id === input.clientId);
+    if (!client) {
+      throw new Error("Cliente nao encontrado");
+    }
+
+    const nextDueDay = Math.max(1, Math.min(31, input.dueDay));
+    client.name = input.name.trim();
+    client.email = input.email.trim();
+    client.phone = input.phone.trim();
+    client.cpf = client.category === "monthly" ? input.cpf : undefined;
+    client.cnpj = client.category === "agreement" ? input.cnpj : undefined;
+    client.billingDueDay = nextDueDay;
+
+    if (client.category === "agreement") {
+      client.includedSpots = Math.max(1, input.includedSpots ?? client.includedSpots);
+      client.vipSpots = Math.min(Math.max(0, input.vipSpots ?? client.vipSpots), client.includedSpots);
+      client.isVip = client.vipSpots > 0;
+      client.monthlyFee = calculateAgreementClientFee(client.includedSpots, client.vipSpots);
+    } else {
+      client.isVip = Boolean(input.isVip);
+      client.includedSpots = 1;
+      client.vipSpots = client.isVip ? 1 : 0;
+      client.monthlyFee = calculateMonthlyClientFee(client.isVip);
+    }
+
+    createActivity({
+      id: createId("act"),
+      type: "alert",
+      title: "Cliente Atualizado",
+      description: `${client.name} teve o cadastro ajustado`,
+      time: "agora",
+    });
+
+    return simulateNetwork(client);
+  },
+
+  addClientVehicle: async (input: AddClientVehicleInput): Promise<Client> => {
+    const client = clientsDb.find((item) => item.id === input.clientId);
+    if (!client) {
+      throw new Error("Cliente nao encontrado");
+    }
+
+    const normalizedPlate = input.plate.trim().toUpperCase();
+    if (!normalizedPlate) {
+      throw new Error("Informe uma placa valida");
+    }
+    if (client.vehicles.some((plate) => normalizePlate(plate) === normalizePlate(normalizedPlate))) {
+      throw new Error("Essa placa ja esta vinculada a este cliente");
+    }
+    const duplicatedPlate = clientsDb.some(
+      (currentClient) =>
+        currentClient.id !== client.id &&
+        currentClient.vehicles.some((plate) => normalizePlate(plate) === normalizePlate(normalizedPlate)),
+    );
+    if (duplicatedPlate) {
+      throw new Error("Essa placa ja esta vinculada a outro cliente");
+    }
+    if (client.category === "monthly" && client.vehicles.length >= 3) {
+      throw new Error("Mensalista pode cadastrar no maximo 3 veiculos");
+    }
+
+    client.vehicles.push(normalizedPlate);
+    createActivity({
+      id: createId("act"),
+      type: "entry",
+      title: "Veiculo Vinculado",
+      description: `${normalizedPlate} adicionado para ${client.name}`,
+      time: "agora",
+      plate: normalizedPlate,
+    });
+
+    return simulateNetwork(client);
+  },
+
+  chargeClient: async (input: ChargeClientInput): Promise<Client> => {
+    const client = clientsDb.find((item) => item.id === input.clientId);
+    if (!client) {
+      throw new Error("Cliente nao encontrado");
+    }
+
+    transactionsDb.unshift({
+      id: createId("t"),
+      vehicleId: client.vehicles[0] ?? client.id,
+      amount: client.monthlyFee,
+      paymentMethod: input.paymentMethod,
+      status: "completed",
+      createdAt: new Date(),
+      completedAt: new Date(),
+      receiptNumber: `CLI-${new Date().getFullYear()}-${String(transactionsDb.length + 1).padStart(4, "0")}`,
+      duration: 0,
+    });
+
+    client.billingDueDate = buildNextBillingDueDate(client.billingDueDate, client.billingDueDay);
+    client.totalSpent += client.monthlyFee;
+
+    createActivity({
+      id: createId("act"),
+      type: "payment",
+      title: "Mensalidade Recebida",
+      description: `${client.name} pagou ${client.monthlyFee.toFixed(2)}`,
       time: "agora",
     });
 

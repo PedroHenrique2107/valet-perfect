@@ -30,7 +30,7 @@ import {
   calculateMonthlyClientFee,
 } from "@/config/pricing";
 import { useCreateClientMutation } from "@/hooks/useValetData";
-import { formatCurrencyBRL } from "@/lib/format";
+import { formatCurrencyBRL, formatDateTimeBR } from "@/lib/format";
 
 const plateRegex = /^(?:[A-Z]{3}-\d{4}|[A-Z]{3}\d[A-Z]\d{2})$/;
 
@@ -45,8 +45,7 @@ const schema = z
     isVip: z.boolean(),
     includedSpots: z.coerce.number().min(1).optional(),
     vipSpots: z.coerce.number().min(0).optional(),
-    billingDueDate: z.string().min(1, "Informe o vencimento"),
-    vehicle1: z.string().min(1, "Cadastre ao menos um veiculo"),
+    vehicle1: z.string().min(1, "Cadastre ao menos uma placa"),
     vehicle2: z.string().optional(),
     vehicle3: z.string().optional(),
     vehicle4: z.string().optional(),
@@ -77,24 +76,20 @@ const schema = z
       });
     }
 
-    if (data.category === "agreement") {
-      if (!data.cnpj || data.cnpj.replace(/\D/g, "").length !== 14) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["cnpj"],
-          message: "Credenciado precisa de um CNPJ valido",
-        });
-      }
+    if (data.category === "agreement" && (!data.cnpj || data.cnpj.replace(/\D/g, "").length !== 14)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cnpj"],
+        message: "Credenciado precisa de um CNPJ valido",
+      });
+    }
 
-      const includedSpots = Math.max(1, data.includedSpots ?? 1);
-      const vipSpots = Math.max(0, data.vipSpots ?? 0);
-      if (vipSpots > includedSpots) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["vipSpots"],
-          message: "As vagas VIP nao podem superar o total de vagas",
-        });
-      }
+    if (data.category === "agreement" && (data.vipSpots ?? 0) > (data.includedSpots ?? 1)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["vipSpots"],
+        message: "As vagas VIP nao podem superar o total de vagas",
+      });
     }
 
     if (data.category === "monthly" && vehicles.length > 3) {
@@ -133,13 +128,50 @@ function formatCnpj(value: string) {
 
 function normalizePlate(value: string) {
   const raw = value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-  if (raw.length <= 7 && /\d/.test(raw.slice(3, 4)) && /[A-Z]/.test(raw.slice(4, 5))) {
-    return raw.slice(0, 7);
-  }
+  const standard = `${raw.slice(0, 3)}-${raw.slice(3, 7)}`.replace(/-$/, "");
+  return raw.length >= 7 && /\d/.test(raw.slice(3, 4)) && /[A-Z]/.test(raw.slice(4, 5)) ? raw.slice(0, 7) : standard;
+}
 
-  const letters = raw.replace(/\d/g, "").slice(0, 3);
-  const numbers = raw.replace(/\D/g, "").slice(0, 4);
-  return numbers.length > 0 ? `${letters}-${numbers}` : letters;
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function CounterField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max?: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="outline" size="icon" onClick={() => onChange(Math.max(min, value - 1))}>
+          -
+        </Button>
+        <div className="flex-1 rounded-lg border border-border/60 bg-muted/20 px-4 py-2 text-center text-lg font-semibold">
+          {value}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={() => onChange(max !== undefined ? Math.min(max, value + 1) : value + 1)}
+        >
+          +
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogProps) {
@@ -157,7 +189,6 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
       isVip: false,
       includedSpots: 1,
       vipSpots: 0,
-      billingDueDate: "",
       vehicle1: "",
       vehicle2: "",
       vehicle3: "",
@@ -178,8 +209,11 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
         : calculateAgreementClientFee(includedSpots, vipSpots),
     [category, includedSpots, isVip, vipSpots],
   );
-
-  const vehicleFields = category === "monthly" ? ["vehicle1", "vehicle2", "vehicle3"] : ["vehicle1", "vehicle2", "vehicle3", "vehicle4", "vehicle5", "vehicle6"];
+  const initialDueDate = useMemo(() => addMonths(new Date(), 1), [open]);
+  const vehicleFields =
+    category === "monthly"
+      ? ["vehicle1", "vehicle2", "vehicle3"]
+      : ["vehicle1", "vehicle2", "vehicle3", "vehicle4", "vehicle5", "vehicle6"];
 
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
@@ -196,10 +230,9 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
         cpf: category === "monthly" ? values.cpf : undefined,
         cnpj: category === "agreement" ? values.cnpj : undefined,
         category: values.category,
-        isVip: values.isVip,
+        isVip: values.category === "monthly" ? values.isVip : undefined,
         includedSpots: category === "agreement" ? includedSpots : 1,
         vipSpots: category === "agreement" ? vipSpots : values.isVip ? 1 : 0,
-        billingDueDate: values.billingDueDate,
         vehicles,
       });
       form.reset();
@@ -215,7 +248,7 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
         <DialogHeader>
           <DialogTitle>Novo Cliente</DialogTitle>
           <DialogDescription>
-            Cadastre mensalistas ou credenciados com frota vinculada, vencimento e regra VIP.
+            O vencimento inicial sera automaticamente em 1 mes a partir do cadastro.
           </DialogDescription>
         </DialogHeader>
 
@@ -273,76 +306,66 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
                 <Input placeholder="Opcional" {...form.register("cpf")} />
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label>Vencimento da mensalidade</Label>
-              <Input type="date" value={form.watch("billingDueDate")} onChange={(event) => form.setValue("billingDueDate", event.target.value, { shouldValidate: true })} />
-            </div>
-
-            {category === "agreement" ? (
-              <>
-                <div className="space-y-2">
-                  <Label>Quantidade de vagas</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={includedSpots}
-                    onChange={(event) => form.setValue("includedSpots", Number(event.target.value), { shouldValidate: true })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Quantidade de vagas VIP</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={includedSpots}
-                    value={vipSpots}
-                    onChange={(event) => form.setValue("vipSpots", Number(event.target.value), { shouldValidate: true })}
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 sm:col-span-2">
-                <p className="text-sm font-medium text-foreground">Mensalista padrao</p>
-                <p className="text-sm text-muted-foreground">
-                  1 vaga fixa, ate 3 veiculos cadastrados e mensalidade base de {formatCurrencyBRL(MONTHLY_STANDARD_RATE)}.
-                </p>
-              </div>
-            )}
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="client-vip"
-                checked={isVip}
-                onCheckedChange={(checked) => form.setValue("isVip", Boolean(checked), { shouldValidate: true })}
+          <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+            <p className="text-sm font-medium text-foreground">Vencimento inicial</p>
+            <p className="mt-1 text-lg font-semibold text-primary">{formatDateTimeBR(initialDueDate)}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Depois voce pode alterar apenas o dia de vencimento no menu do cliente.
+            </p>
+          </div>
+
+          {category === "agreement" ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <CounterField
+                label="Quantidade de vagas"
+                value={includedSpots}
+                min={1}
+                onChange={(value) => form.setValue("includedSpots", value, { shouldValidate: true })}
               />
-              <Label htmlFor="client-vip">
-                Cliente VIP
-                {category === "monthly"
-                  ? ` (+40% sobre ${formatCurrencyBRL(MONTHLY_STANDARD_RATE)})`
-                  : ` (+20% por vaga VIP sobre ${formatCurrencyBRL(AGREEMENT_STANDARD_SPOT_RATE)})`}
-              </Label>
+              <CounterField
+                label="Quantidade de vagas VIP"
+                value={vipSpots}
+                min={0}
+                max={includedSpots}
+                onChange={(value) => form.setValue("vipSpots", value, { shouldValidate: true })}
+              />
             </div>
-            {category === "agreement" ? (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Valor de vaga comum: {formatCurrencyBRL(AGREEMENT_STANDARD_SPOT_RATE)}. Vaga VIP: {formatCurrencyBRL(AGREEMENT_STANDARD_SPOT_RATE * AGREEMENT_VIP_MULTIPLIER)}.
+          ) : (
+            <div className="rounded-xl border border-border/60 bg-muted/10 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="client-vip"
+                  checked={isVip}
+                  onCheckedChange={(checked) => form.setValue("isVip", Boolean(checked), { shouldValidate: true })}
+                />
+                <Label htmlFor="client-vip">
+                  Cliente VIP (+40% sobre {formatCurrencyBRL(MONTHLY_STANDARD_RATE)})
+                </Label>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Mensalista tem 1 vaga e pode cadastrar ate 3 placas.
               </p>
-            ) : isVip ? (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Mensalidade VIP: {formatCurrencyBRL(MONTHLY_STANDARD_RATE * MONTHLY_VIP_MULTIPLIER)}.
+            </div>
+          )}
+
+          {category === "agreement" ? (
+            <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
+              <p className="text-sm font-medium text-foreground">VIP para credenciado</p>
+              <p className="text-sm text-muted-foreground">
+                O valor das vagas VIP ja e calculado automaticamente com acrescimo de 20%. Vaga comum: {formatCurrencyBRL(AGREEMENT_STANDARD_SPOT_RATE)}. Vaga VIP: {formatCurrencyBRL(AGREEMENT_STANDARD_SPOT_RATE * AGREEMENT_VIP_MULTIPLIER)}.
               </p>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           <div className="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">
             <div>
               <p className="font-medium text-foreground">Veiculos vinculados</p>
               <p className="text-sm text-muted-foreground">
                 {category === "monthly"
-                  ? "Cadastre ate 3 placas. O sistema reconhece a placa na entrada e decide a cobranca na saida."
-                  : "Cadastre a frota que deve ser reconhecida automaticamente no patio."}
+                  ? "Cadastre de 1 a 3 placas. A primeira e obrigatoria."
+                  : "Cadastre de 1 a 6 placas agora. Depois voce pode continuar adicionando mais pelo card."}
               </p>
             </div>
 
@@ -363,6 +386,11 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
           <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
             <p className="text-sm font-medium text-foreground">Valor mensal projetado</p>
             <p className="mt-1 text-2xl font-bold text-primary">{formatCurrencyBRL(fee)}</p>
+            {category === "monthly" && isVip ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Mensalidade VIP usa multiplicador de {MONTHLY_VIP_MULTIPLIER}x.
+              </p>
+            ) : null}
           </div>
 
           {(Object.keys(form.formState.errors).length > 0 || submitError) && (

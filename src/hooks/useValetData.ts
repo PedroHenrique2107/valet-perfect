@@ -7,8 +7,11 @@ import {
   type CreateAttendantInput,
   type CreateClientInput,
   type CreateVehicleInput,
+  type AddClientVehicleInput,
+  type ChargeClientInput,
   type MoveParkingSpotInput,
   type RegisterExitInput,
+  type UpdateClientInput,
   type UpdateParkingSpotConfigInput,
   type UpdateVehicleSpotInput,
 } from "@/services/valetApi";
@@ -153,6 +156,30 @@ export function useCreateClientMutation() {
   });
 }
 
+export function useUpdateClientMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: UpdateClientInput) => valetApi.updateClient(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useAddClientVehicleMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: AddClientVehicleInput) => valetApi.addClientVehicle(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useChargeClientMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: ChargeClientInput) => valetApi.chargeClient(input),
+    onSuccess: invalidate,
+  });
+}
+
 export function useCreateAttendantMutation() {
   const invalidate = useInvalidateCoreQueries();
   return useMutation({
@@ -173,6 +200,14 @@ export function useClearAllAttendantsMutation() {
   const invalidate = useInvalidateCoreQueries();
   return useMutation({
     mutationFn: valetApi.clearAllAttendants,
+    onSuccess: invalidate,
+  });
+}
+
+export function useClearAllClientsMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: valetApi.clearAllClients,
     onSuccess: invalidate,
   });
 }

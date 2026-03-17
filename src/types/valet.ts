@@ -173,6 +173,7 @@ export interface Client {
   includedSpots: number;
   vipSpots: number;
   monthlyFee: number;
+  billingDueDay: number;
   billingDueDate: Date;
   totalVisits: number;
   totalSpent: number;

@@ -4,20 +4,31 @@ import {
   CalendarClock,
   CreditCard,
   Mail,
+  MoreVertical,
   Phone,
   Plus,
   Search,
   ShieldCheck,
   Star,
+  Trash2,
   UserCircle,
 } from "lucide-react";
 import { ClientCreateDialog } from "@/components/forms/ClientCreateDialog";
+import { ClientChargeDialog } from "@/components/forms/ClientChargeDialog";
+import { ClientEditDialog } from "@/components/forms/ClientEditDialog";
+import { ClientVehicleDialog } from "@/components/forms/ClientVehicleDialog";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useCan } from "@/contexts/AuthContext";
-import { useClientsQuery } from "@/hooks/useValetData";
+import { useClearAllClientsMutation, useClientsQuery } from "@/hooks/useValetData";
 import { formatCurrencyBRL, formatDateTimeBR } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Client } from "@/types/valet";
@@ -35,10 +46,15 @@ function isOverdue(client: Client) {
 
 export default function ClientsPage() {
   const { data: clients = [] } = useClientsQuery();
+  const clearAllClients = useClearAllClientsMutation();
   const canCreateClient = useCan("create_client");
   const [createOpen, setCreateOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<ClientCategoryFilter>("all");
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [vehicleOpen, setVehicleOpen] = useState(false);
+  const [chargeOpen, setChargeOpen] = useState(false);
 
   const filteredClients = useMemo(() => {
     const normalized = searchQuery.trim().toLowerCase();
@@ -76,14 +92,25 @@ export default function ClientsPage() {
               Gestao de credenciados e mensalistas com frota vinculada, VIP e controle de vencimento.
             </p>
           </div>
-          <Button
-            className="gap-2 bg-gradient-primary hover:opacity-90"
-            onClick={() => setCreateOpen(true)}
-            disabled={!canCreateClient}
-          >
-            <Plus className="h-4 w-4" />
-            Novo Cliente
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+              disabled={clients.length === 0 || clearAllClients.isPending}
+              onClick={() => clearAllClients.mutate()}
+            >
+              <Trash2 className="h-4 w-4" />
+              Limpar clientes
+            </Button>
+            <Button
+              className="gap-2 bg-gradient-primary hover:opacity-90"
+              onClick={() => setCreateOpen(true)}
+              disabled={!canCreateClient}
+            >
+              <Plus className="h-4 w-4" />
+              Novo Cliente
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -120,17 +147,44 @@ export default function ClientsPage() {
             description="Empresas com quantidade de vagas e possibilidade de reservar vagas VIP."
             clients={filteredClients.filter((client) => client.category === "agreement")}
             emptyMessage="Nenhum credenciado encontrado com o filtro atual."
+            onEdit={(client) => {
+              setSelectedClient(client);
+              setEditOpen(true);
+            }}
+            onAddVehicle={(client) => {
+              setSelectedClient(client);
+              setVehicleOpen(true);
+            }}
+            onCharge={(client) => {
+              setSelectedClient(client);
+              setChargeOpen(true);
+            }}
           />
           <CategoryPanel
             title="Mensalistas"
             description="Clientes pessoa fisica com ate 3 placas vinculadas e 1 vaga recorrente."
             clients={filteredClients.filter((client) => client.category === "monthly")}
             emptyMessage="Nenhum mensalista encontrado com o filtro atual."
+            onEdit={(client) => {
+              setSelectedClient(client);
+              setEditOpen(true);
+            }}
+            onAddVehicle={(client) => {
+              setSelectedClient(client);
+              setVehicleOpen(true);
+            }}
+            onCharge={(client) => {
+              setSelectedClient(client);
+              setChargeOpen(true);
+            }}
           />
         </div>
       </div>
 
       <ClientCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ClientEditDialog open={editOpen} onOpenChange={setEditOpen} client={selectedClient} />
+      <ClientVehicleDialog open={vehicleOpen} onOpenChange={setVehicleOpen} client={selectedClient} />
+      <ClientChargeDialog open={chargeOpen} onOpenChange={setChargeOpen} client={selectedClient} />
     </MainLayout>
   );
 }
@@ -140,11 +194,17 @@ function CategoryPanel({
   description,
   clients,
   emptyMessage,
+  onEdit,
+  onAddVehicle,
+  onCharge,
 }: {
   title: string;
   description: string;
   clients: Client[];
   emptyMessage: string;
+  onEdit: (client: Client) => void;
+  onAddVehicle: (client: Client) => void;
+  onCharge: (client: Client) => void;
 }) {
   return (
     <section className="stat-card space-y-4">
@@ -194,11 +254,26 @@ function CategoryPanel({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-sm sm:min-w-[240px]">
-                    <Metric label="Mensalidade" value={formatCurrencyBRL(client.monthlyFee)} />
-                    <Metric label="Vencimento" value={formatDateTimeBR(client.billingDueDate)} />
-                    <Metric label="Vagas" value={String(client.includedSpots)} />
-                    <Metric label="Vagas VIP" value={String(client.vipSpots)} />
+                  <div className="flex flex-col gap-3">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="self-end">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onEdit(client)}>Editar</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onAddVehicle(client)}>Adicionar Veiculo</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onCharge(client)}>Realizar Cobranca</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <div className="grid grid-cols-2 gap-2 text-sm sm:min-w-[240px]">
+                      <Metric label="Mensalidade" value={formatCurrencyBRL(client.monthlyFee)} />
+                      <Metric label="Vencimento" value={formatDateTimeBR(client.billingDueDate)} />
+                      <Metric label="Vagas" value={String(client.includedSpots)} />
+                      <Metric label="Vagas VIP" value={String(client.vipSpots)} />
+                    </div>
                   </div>
                 </div>
 
