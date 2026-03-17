@@ -12,6 +12,7 @@ export type Permission =
   | "view_attendants"
   | "view_parking_map"
   | "view_financial"
+  | "view_clients"
   | "create_vehicle"
   | "register_exit"
   | "assign_task"

@@ -13,6 +13,7 @@ const VehiclesPage = lazy(() => import("./pages/VehiclesPage"));
 const AttendantsPage = lazy(() => import("./pages/AttendantsPage"));
 const ParkingMapPage = lazy(() => import("./pages/ParkingMapPage"));
 const FinancialPage = lazy(() => import("./pages/FinancialPage"));
+const ClientsPage = lazy(() => import("./pages/ClientsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,6 +71,14 @@ const App = () => (
                 element={
                   <ProtectedRoute allowedRoles={["admin", "cashier"]}>
                     <FinancialPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/clients"
+                element={
+                  <ProtectedRoute allowedRoles={["admin", "attendant", "cashier"]}>
+                    <ClientsPage />
                   </ProtectedRoute>
                 }
               />

@@ -9,4 +9,8 @@ describe("permissions", () => {
   it("blocks attendant from viewing financial page", () => {
     expect(hasPermission("attendant", "view_financial")).toBe(false);
   });
+
+  it("allows cashier to view clients page", () => {
+    expect(hasPermission("cashier", "view_clients")).toBe(true);
+  });
 });

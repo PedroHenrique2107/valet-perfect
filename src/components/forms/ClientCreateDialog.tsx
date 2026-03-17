@@ -21,10 +21,11 @@ import {
 import { useCreateClientMutation } from "@/hooks/useValetData";
 
 const schema = z.object({
-  name: z.string().min(2, "Nome obrigatório"),
-  email: z.string().email("E-mail inválido"),
-  phone: z.string().min(8, "Telefone obrigatório"),
+  name: z.string().min(2, "Nome obrigatorio"),
+  email: z.string().email("E-mail invalido"),
+  phone: z.string().min(8, "Telefone obrigatorio"),
   cpf: z.string().optional(),
+  category: z.enum(["agreement", "monthly"]),
   tier: z.enum(["bronze", "silver", "gold", "diamond"]),
 });
 
@@ -44,6 +45,7 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
       email: "",
       phone: "",
       cpf: "",
+      category: "agreement",
       tier: "silver",
     },
   });
@@ -59,7 +61,7 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Novo Cliente</DialogTitle>
-          <DialogDescription>Cadastre um cliente no programa de fidelidade.</DialogDescription>
+          <DialogDescription>Cadastre um cliente credenciado ou mensalista.</DialogDescription>
         </DialogHeader>
 
         <form className="space-y-3" onSubmit={onSubmit}>
@@ -68,9 +70,25 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
           <Input placeholder="Telefone" {...form.register("phone")} />
           <Input placeholder="CPF (opcional)" {...form.register("cpf")} />
 
-          <Select value={form.watch("tier")} onValueChange={(value) => form.setValue("tier", value as FormValues["tier"])}>
+          <Select
+            value={form.watch("category")}
+            onValueChange={(value) => form.setValue("category", value as FormValues["category"])}
+          >
             <SelectTrigger>
-              <SelectValue placeholder="Nível" />
+              <SelectValue placeholder="Categoria do cliente" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="agreement">Credenciado</SelectItem>
+              <SelectItem value="monthly">Mensalista</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={form.watch("tier")}
+            onValueChange={(value) => form.setValue("tier", value as FormValues["tier"])}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Nivel" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="bronze">Bronze</SelectItem>

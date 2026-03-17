@@ -45,7 +45,7 @@ const mainNavItems: NavItem[] = [
   { icon: Users, label: "Manobristas", href: "/attendants" },
   { icon: MapPin, label: "Mapa do Patio", href: "/parking-map" },
   { icon: Receipt, label: "Financeiro", href: "/financial" },
-  { icon: UserCircle, label: "Clientes", href: "/clients", comingSoon: true },
+  { icon: UserCircle, label: "Clientes", href: "/clients" },
   { icon: BarChart3, label: "Relatorios", href: "/reports", comingSoon: true },
   { icon: Calendar, label: "Eventos", href: "/events", comingSoon: true },
 ];

@@ -160,6 +160,7 @@ export interface Client {
   phone: string;
   cpf?: string;
   vehicles: string[];
+  category: "agreement" | "monthly";
   tier: 'bronze' | 'silver' | 'gold' | 'diamond';
   totalVisits: number;
   totalSpent: number;

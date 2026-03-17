@@ -114,6 +114,7 @@ export interface CreateClientInput {
   email: string; // Email do cliente
   phone: string; // Telefone do cliente
   cpf?: string; // CPF do cliente (opcional)
+  category: Client["category"];
   tier: Client["tier"]; // Nível de fidelidade do cliente (ex: bronze, silver, gold)
 }
 
@@ -953,6 +954,7 @@ export const valetApi = {
       phone: input.phone,
       cpf: input.cpf,
       vehicles: [],
+      category: input.category,
       tier: input.tier,
       totalVisits: 0,
       totalSpent: 0,
