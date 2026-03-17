@@ -63,6 +63,8 @@ interface ClientEditDialogProps {
 export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialogProps) {
   const updateClient = useUpdateClientMutation();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [driverNames, setDriverNames] = useState<Record<string, string>>({});
+  const [vehicleModels, setVehicleModels] = useState<Record<string, string>>({});
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -91,6 +93,8 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
       vipSpots: client.vipSpots,
       isVip: client.isVip,
     });
+    setDriverNames(client.vehicleDrivers ?? {});
+    setVehicleModels(client.vehicleModels ?? {});
   }, [client, form, open]);
 
   const dueDay = form.watch("dueDay");
@@ -121,6 +125,8 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
         isVip: client.category === "monthly" ? values.isVip : undefined,
         includedSpots: client.category === "agreement" ? includedSpots : undefined,
         vipSpots: client.category === "agreement" ? vipSpots : undefined,
+        vehicleDrivers: client.category === "agreement" ? driverNames : undefined,
+        vehicleModels,
       });
       onOpenChange(false);
     } catch (error) {
@@ -204,21 +210,61 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
           </div>
 
           {client.category === "agreement" ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Quantidade de vagas</Label>
-                <div className="flex items-center gap-2">
-                  <Button type="button" variant="outline" size="icon" onClick={() => form.setValue("includedSpots", Math.max(1, includedSpots - 1), { shouldValidate: true })}>-</Button>
-                  <div className="flex-1 rounded-lg border border-border/60 bg-muted/20 px-4 py-2 text-center text-lg font-semibold">{includedSpots}</div>
-                  <Button type="button" variant="outline" size="icon" onClick={() => form.setValue("includedSpots", includedSpots + 1, { shouldValidate: true })}>+</Button>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Quantidade de vagas</Label>
+                  <div className="flex items-center gap-2">
+                    <Button type="button" variant="outline" size="icon" onClick={() => form.setValue("includedSpots", Math.max(1, includedSpots - 1), { shouldValidate: true })}>-</Button>
+                    <div className="flex-1 rounded-lg border border-border/60 bg-muted/20 px-4 py-2 text-center text-lg font-semibold">{includedSpots}</div>
+                    <Button type="button" variant="outline" size="icon" onClick={() => form.setValue("includedSpots", includedSpots + 1, { shouldValidate: true })}>+</Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Quantidade de vagas VIP</Label>
+                  <div className="flex items-center gap-2">
+                    <Button type="button" variant="outline" size="icon" onClick={() => form.setValue("vipSpots", Math.max(0, vipSpots - 1), { shouldValidate: true })}>-</Button>
+                    <div className="flex-1 rounded-lg border border-border/60 bg-muted/20 px-4 py-2 text-center text-lg font-semibold">{vipSpots}</div>
+                    <Button type="button" variant="outline" size="icon" onClick={() => form.setValue("vipSpots", Math.min(includedSpots, vipSpots + 1), { shouldValidate: true })}>+</Button>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Quantidade de vagas VIP</Label>
-                <div className="flex items-center gap-2">
-                  <Button type="button" variant="outline" size="icon" onClick={() => form.setValue("vipSpots", Math.max(0, vipSpots - 1), { shouldValidate: true })}>-</Button>
-                  <div className="flex-1 rounded-lg border border-border/60 bg-muted/20 px-4 py-2 text-center text-lg font-semibold">{vipSpots}</div>
-                  <Button type="button" variant="outline" size="icon" onClick={() => form.setValue("vipSpots", Math.min(includedSpots, vipSpots + 1), { shouldValidate: true })}>+</Button>
+
+              <div className="rounded-xl border border-border/60 bg-muted/10 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Dados por veiculo</p>
+                  <p className="text-sm text-muted-foreground">
+                    Ajuste condutor e modelo de cada placa cadastrada para aparecer automaticamente no registro de entrada e saida.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  {client.vehicles.map((plate) => (
+                    <div key={plate} className="grid grid-cols-1 gap-2 sm:grid-cols-[140px_1fr_1fr] sm:items-center">
+                      <div className="rounded-lg border border-border/60 bg-background px-3 py-2 font-mono text-sm">
+                        {plate}
+                      </div>
+                      <Input
+                        placeholder="Nome do condutor"
+                        value={driverNames[plate.replace(/[^A-Z0-9]/gi, "").toUpperCase()] ?? ""}
+                        onChange={(event) =>
+                          setDriverNames((current) => ({
+                            ...current,
+                            [plate.replace(/[^A-Z0-9]/gi, "").toUpperCase()]: event.target.value,
+                          }))
+                        }
+                      />
+                      <Input
+                        placeholder="Modelo do veiculo"
+                        value={vehicleModels[plate.replace(/[^A-Z0-9]/gi, "").toUpperCase()] ?? ""}
+                        onChange={(event) =>
+                          setVehicleModels((current) => ({
+                            ...current,
+                            [plate.replace(/[^A-Z0-9]/gi, "").toUpperCase()]: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

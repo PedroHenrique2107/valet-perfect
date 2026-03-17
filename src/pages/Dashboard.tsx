@@ -28,6 +28,7 @@ import {
   useParkingSpotsQuery,
   useRequestVehicleMutation,
   useRevenueDataQuery,
+  useTransactionsQuery,
   useVehiclesQuery,
 } from "@/hooks/useValetData";
 import { useCan } from "@/contexts/AuthContext";
@@ -40,6 +41,7 @@ export default function Dashboard() {
   const { data: attendants = [] } = useAttendantsQuery();
   const { data: parkingSpots = [] } = useParkingSpotsQuery();
   const { data: revenueData = [] } = useRevenueDataQuery();
+  const { data: transactions = [] } = useTransactionsQuery();
   const { data: occupancyData = [] } = useOccupancyDataQuery();
   const { data: activities = [] } = useActivitiesQuery();
   const requestVehicle = useRequestVehicleMutation();
@@ -57,6 +59,38 @@ export default function Dashboard() {
     (vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit",
   );
   const activeAttendants = attendants.filter((attendant) => attendant.isOnline);
+  const todayCompletedTransactions = transactions.filter((transaction) => {
+    const now = new Date();
+    return (
+      transaction.status === "completed" &&
+      transaction.createdAt.getFullYear() === now.getFullYear() &&
+      transaction.createdAt.getMonth() === now.getMonth() &&
+      transaction.createdAt.getDate() === now.getDate()
+    );
+  });
+  const revenueBreakdown = {
+    monthly: todayCompletedTransactions
+      .filter((transaction) => transaction.receiptNumber.startsWith("CLI-"))
+      .reduce((acc, transaction) => acc + transaction.amount, 0),
+    agreement: todayCompletedTransactions
+      .filter((transaction) => {
+        if (transaction.receiptNumber.startsWith("AGR-")) {
+          return true;
+        }
+        if (transaction.receiptNumber.startsWith("CLI-")) {
+          return false;
+        }
+        const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+        return vehicle?.recurringClientCategory === "agreement";
+      })
+      .reduce((acc, transaction) => acc + transaction.amount, 0),
+    avulso: todayCompletedTransactions
+      .filter((transaction) => {
+        const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+        return !transaction.receiptNumber.startsWith("CLI-") && !transaction.receiptNumber.startsWith("AGR-") && vehicle?.recurringClientCategory !== "agreement";
+      })
+      .reduce((acc, transaction) => acc + transaction.amount, 0),
+  };
 
   if (!stats) {
     return <div className="p-6 text-sm text-muted-foreground">Carregando dashboard...</div>;
@@ -145,7 +179,14 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <RevenueChart data={revenueData} />
+            <RevenueChart
+              data={revenueData}
+              breakdown={[
+                { label: "Mensalidade", value: revenueBreakdown.monthly, tone: "primary" },
+                { label: "Credenciado", value: revenueBreakdown.agreement, tone: "info" },
+                { label: "Avulso", value: revenueBreakdown.avulso, tone: "success" },
+              ]}
+            />
             <OccupancyChart data={occupancyData} />
           </div>
           <ParkingMap spots={parkingSpots} />

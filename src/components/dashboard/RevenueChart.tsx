@@ -7,6 +7,11 @@ interface RevenueChartProps {
   title?: string;
   subtitle?: string;
   summaryNote?: string;
+  breakdown?: Array<{
+    label: string;
+    value: number;
+    tone?: "primary" | "info" | "success";
+  }>;
 }
 
 interface RevenueTooltipProps {
@@ -50,9 +55,16 @@ export function RevenueChart({
   title = "Receita Semanal",
   subtitle = "Ultimos 7 dias",
   summaryNote = "+12.5% vs semana anterior",
+  breakdown = [],
 }: RevenueChartProps) {
+  const toneClass: Record<NonNullable<RevenueChartProps["breakdown"]>[number]["tone"], string> = {
+    primary: "border-primary/30 bg-primary/5 text-primary",
+    info: "border-info/30 bg-info/5 text-info",
+    success: "border-success/30 bg-success/5 text-success",
+  };
+
   return (
-    <div className="stat-card h-[300px]">
+    <div className="stat-card min-h-[300px]">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-foreground">{title}</h3>
@@ -65,40 +77,55 @@ export function RevenueChart({
           <p className="text-sm text-success">{summaryNote}</p>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height="80%">
-        <AreaChart data={data} margin={{ top: 10, right: 10, left: -8, bottom: 0 }}>
-          <defs>
-            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(217, 33%, 17%)" vertical={false} />
-          <XAxis
-            dataKey="date"
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 12 }}
-            minTickGap={18}
-          />
-          <YAxis
-            width={44}
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 12 }}
-            tickFormatter={formatCompactAxisValue}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Area
-            type="monotone"
-            dataKey="revenue"
-            stroke="hsl(217, 91%, 60%)"
-            strokeWidth={2}
-            fillOpacity={1}
-            fill="url(#colorRevenue)"
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+      {breakdown.length > 0 ? (
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {breakdown.map((item) => (
+            <div
+              key={item.label}
+              className={`rounded-xl border px-3 py-2 ${toneClass[item.tone ?? "primary"]}`}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em]">{item.label}</p>
+              <p className="mt-1 text-base font-bold">{formatCurrencyBRL(item.value)}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="h-[220px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 10, right: 10, left: -8, bottom: 0 }}>
+            <defs>
+              <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(217, 33%, 17%)" vertical={false} />
+            <XAxis
+              dataKey="date"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 12 }}
+              minTickGap={18}
+            />
+            <YAxis
+              width={44}
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 12 }}
+              tickFormatter={formatCompactAxisValue}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Area
+              type="monotone"
+              dataKey="revenue"
+              stroke="hsl(217, 91%, 60%)"
+              strokeWidth={2}
+              fillOpacity={1}
+              fill="url(#colorRevenue)"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

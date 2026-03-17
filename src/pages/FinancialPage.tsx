@@ -103,6 +103,30 @@ const paymentStatusConfig: Record<PaymentStatus, { label: string; className: str
   refunded: { label: "Estornado", className: "bg-muted text-muted-foreground" },
 };
 
+function isMonthlyFeeTransaction(transaction: Transaction) {
+  return transaction.receiptNumber.startsWith("CLI-");
+}
+
+function isAgreementChargeTransaction(transaction: Transaction) {
+  return transaction.receiptNumber.startsWith("AGR-");
+}
+
+function getRevenueCategory(transaction: Transaction, vehicle?: Vehicle) {
+  if (isAgreementChargeTransaction(transaction)) {
+    return "agreement" as const;
+  }
+
+  if (isMonthlyFeeTransaction(transaction)) {
+    return "monthly" as const;
+  }
+
+  if (vehicle?.recurringClientCategory === "agreement") {
+    return "agreement" as const;
+  }
+
+  return "avulso" as const;
+}
+
 function getResolvedRange(period: PeriodPreset, customRange?: DateRange) {
   const now = new Date();
 
@@ -278,43 +302,58 @@ function buildVehicleMovementData(vehicles: Vehicle[], start: Date, end: Date) {
   }));
 }
 
-function createLogoBase64() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 420;
-  canvas.height = 110;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return undefined;
+async function createLogoBase64() {
+  const createFallbackLogo = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 192;
+    canvas.height = 192;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return undefined;
+    }
+
+    context.fillStyle = "#0f172a";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#2563eb";
+    context.beginPath();
+    context.roundRect(28, 28, 136, 136, 32);
+    context.fill();
+    context.fillStyle = "#ffffff";
+    context.font = "bold 96px Arial";
+    context.fillText("V", 60, 128);
+    return canvas.toDataURL("image/png");
+  };
+
+  try {
+    const response = await fetch("/LogoValetTracker.ico");
+    if (!response.ok) {
+      return createFallbackLogo();
+    }
+
+    const blob = await response.blob();
+    const imageUrl = URL.createObjectURL(blob);
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const nextImage = new Image();
+      nextImage.onload = () => resolve(nextImage);
+      nextImage.onerror = reject;
+      nextImage.src = imageUrl;
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 192;
+    canvas.height = 192;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      URL.revokeObjectURL(imageUrl);
+      return createFallbackLogo();
+    }
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(imageUrl);
+    return canvas.toDataURL("image/png");
+  } catch {
+    return createFallbackLogo();
   }
-
-  context.fillStyle = "#0f172a";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  const radius = 18;
-  context.fillStyle = "#2563eb";
-  context.beginPath();
-  context.moveTo(24 + radius, 22);
-  context.lineTo(90 - radius, 22);
-  context.quadraticCurveTo(90, 22, 90, 22 + radius);
-  context.lineTo(90, 88 - radius);
-  context.quadraticCurveTo(90, 88, 90 - radius, 88);
-  context.lineTo(24 + radius, 88);
-  context.quadraticCurveTo(24, 88, 24, 88 - radius);
-  context.lineTo(24, 22 + radius);
-  context.quadraticCurveTo(24, 22, 24 + radius, 22);
-  context.closePath();
-  context.fill();
-
-  context.fillStyle = "#ffffff";
-  context.font = "bold 34px Arial";
-  context.fillText("V", 46, 66);
-  context.font = "bold 26px Arial";
-  context.fillText("ValetTracker", 112, 52);
-  context.font = "16px Arial";
-  context.fillStyle = "#cbd5e1";
-  context.fillText("Financial Executive Report", 113, 78);
-
-  return canvas.toDataURL("image/png");
 }
 
 async function downloadWorkbook(
@@ -409,9 +448,19 @@ export default function FinancialPage() {
   );
   const completedCount = completedTransactions.length;
   const previousCompletedCount = previousCompletedTransactions.length;
-  const avgTicket = completedCount > 0 ? periodRevenue / completedCount : 0;
+  const avulsoTransactions = completedTransactions.filter((transaction) => {
+    const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+    return getRevenueCategory(transaction, vehicle) === "avulso";
+  });
+  const previousAvulsoTransactions = previousCompletedTransactions.filter((transaction) => {
+    const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+    return getRevenueCategory(transaction, vehicle) === "avulso";
+  });
+  const avulsoRevenue = avulsoTransactions.reduce((acc, transaction) => acc + transaction.amount, 0);
+  const previousAvulsoRevenue = previousAvulsoTransactions.reduce((acc, transaction) => acc + transaction.amount, 0);
+  const avgTicket = avulsoTransactions.length > 0 ? avulsoRevenue / avulsoTransactions.length : 0;
   const previousAvgTicket =
-    previousCompletedCount > 0 ? previousRevenue / previousCompletedCount : 0;
+    previousAvulsoTransactions.length > 0 ? previousAvulsoRevenue / previousAvulsoTransactions.length : 0;
 
   const revenueTrend = calculateChange(periodRevenue, previousRevenue);
   const completedTrend = calculateChange(completedCount, previousCompletedCount);
@@ -441,6 +490,16 @@ export default function FinancialPage() {
     }))
     .filter((item) => item.amount > 0 || item.count > 0)
     .sort((left, right) => right.amount - left.amount);
+
+  const revenueBreakdown = completedTransactions.reduce(
+    (acc, transaction) => {
+      const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+      const category = getRevenueCategory(transaction, vehicle);
+      acc[category] += transaction.amount;
+      return acc;
+    },
+    { monthly: 0, agreement: 0, avulso: 0 },
+  );
 
   const chartData = useMemo(
     () => buildRevenueChartData(completedTransactions, activeRange.start, activeRange.end),
@@ -495,7 +554,7 @@ export default function FinancialPage() {
       subtitleCell.alignment = { vertical: "middle", horizontal: "left" };
       subtitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
 
-      const logo = createLogoBase64();
+      const logo = await createLogoBase64();
       if (logo) {
         const imageId = workbook.addImage({ base64: logo, extension: "png" });
         summarySheet.addImage(imageId, "A1:A3");
@@ -547,7 +606,7 @@ export default function FinancialPage() {
       summarySheet.getCell("F12").font = { bold: true, color: { argb: "FF0F172A" } };
       summarySheet.mergeCells("F13:H16");
       const recapCell = summarySheet.getCell("F13");
-      recapCell.value = `Receita atual: ${formatCurrencyBRL(periodRevenue)}\nReceita anterior: ${formatCurrencyBRL(previousRevenue)}\nTickets concluidos: ${completedCount}\nPendentes: ${pendingTransactions.length}`;
+      recapCell.value = `Receita atual: ${formatCurrencyBRL(periodRevenue)}\nMensalidade: ${formatCurrencyBRL(revenueBreakdown.monthly)}\nCredenciado: ${formatCurrencyBRL(revenueBreakdown.agreement)}\nAvulso: ${formatCurrencyBRL(revenueBreakdown.avulso)}\nPendentes: ${pendingTransactions.length}`;
       recapCell.alignment = { wrapText: true, vertical: "top" };
       recapCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6FF" } };
       recapCell.border = {
@@ -613,6 +672,57 @@ export default function FinancialPage() {
       if (index % 2 === 0) {
         row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
       }
+      });
+
+      const dashboardSheet = workbook.addWorksheet("Dashboard", {
+        views: [{ state: "frozen", ySplit: 4 }],
+      });
+      dashboardSheet.columns = [
+        { header: "Indicador", key: "indicator", width: 28 },
+        { header: "Valor", key: "value", width: 20 },
+      ];
+
+      dashboardSheet.mergeCells("B1:D2");
+      const dashboardTitle = dashboardSheet.getCell("B1");
+      dashboardTitle.value = "Dashboard Operacional";
+      dashboardTitle.font = { size: 20, bold: true, color: { argb: "FFFFFFFF" } };
+      dashboardTitle.alignment = { vertical: "middle", horizontal: "left" };
+      dashboardTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
+
+      if (logo) {
+        const dashboardImageId = workbook.addImage({ base64: logo, extension: "png" });
+        dashboardSheet.addImage(dashboardImageId, "A1:A2");
+      }
+
+      dashboardSheet.getRow(4).values = ["Indicador", "Valor"];
+      dashboardSheet.getRow(4).font = { bold: true, color: { argb: "FFFFFFFF" } };
+      dashboardSheet.getRow(4).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
+
+      [
+        ["Veiculos estacionados", dashboardStats?.totalVehicles ?? 0],
+        ["Veiculos aguardando", dashboardStats?.vehiclesWaiting ?? 0],
+        ["Vagas disponiveis", dashboardStats?.availableSpots ?? 0],
+        ["Taxa de ocupacao", `${dashboardStats?.occupancyRate ?? 0}%`],
+        ["Receita do dia", formatCurrencyBRL(dashboardStats?.todayRevenue ?? 0)],
+        ["Tempo medio de permanencia", formatDurationMinutes(dashboardStats?.avgStayDuration ?? 0)],
+        ["Tempo medio de espera", `${dashboardStats?.avgWaitTime ?? 0} min`],
+        ["Mensalidade no periodo", formatCurrencyBRL(revenueBreakdown.monthly)],
+        ["Credenciado no periodo", formatCurrencyBRL(revenueBreakdown.agreement)],
+        ["Avulso no periodo", formatCurrencyBRL(revenueBreakdown.avulso)],
+      ].forEach(([indicator, value], index) => {
+        const row = dashboardSheet.getRow(index + 5);
+        row.values = [indicator, value];
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFE5E7EB" } },
+            left: { style: "thin", color: { argb: "FFE5E7EB" } },
+            bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+            right: { style: "thin", color: { argb: "FFE5E7EB" } },
+          };
+        });
+        if (index % 2 === 0) {
+          row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+        }
       });
 
       await downloadWorkbook(workbook, `financeiro-executivo-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
@@ -818,7 +928,7 @@ export default function FinancialPage() {
           <StatCard
             title="Ticket medio"
             value={formatCurrencyBRL(avgTicket)}
-            subtitle="Media por pagamento concluido"
+            subtitle="Apenas pagamentos avulsos"
             icon={Receipt}
             trend={{ ...avgTicketTrend, label: "vs periodo anterior" }}
             variant="info"
@@ -844,6 +954,11 @@ export default function FinancialPage() {
                   : rangeLabel
               }
               summaryNote={`${revenueTrend.isPositive ? "+" : "-"}${revenueTrend.value}% vs periodo anterior`}
+              breakdown={[
+                { label: "Mensalidade", value: revenueBreakdown.monthly, tone: "primary" },
+                { label: "Credenciado", value: revenueBreakdown.agreement, tone: "info" },
+                { label: "Avulso", value: revenueBreakdown.avulso, tone: "success" },
+              ]}
             />
             <VehicleMovementChart
               data={movementData}

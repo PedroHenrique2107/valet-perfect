@@ -60,9 +60,10 @@ export function Sidebar() {
   const location = useLocation();
   const { user, setRole } = useAuth();
   const { data: vehicles = [] } = useVehiclesQuery();
+  const parkedVehiclesCount = vehicles.filter((vehicle) => vehicle.status === "parked").length;
 
   const resolvedMainNavItems = mainNavItems.map((item) =>
-    item.href === "/vehicles" ? { ...item, badge: vehicles.length } : item,
+    item.href === "/vehicles" ? { ...item, badge: parkedVehiclesCount } : item,
   );
 
   const NavItemLink = ({ item }: { item: NavItem }) => {

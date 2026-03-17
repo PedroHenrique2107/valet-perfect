@@ -51,6 +51,12 @@ const schema = z
     vehicle4: z.string().optional(),
     vehicle5: z.string().optional(),
     vehicle6: z.string().optional(),
+    vehicle1Model: z.string().optional(),
+    vehicle2Model: z.string().optional(),
+    vehicle3Model: z.string().optional(),
+    vehicle4Model: z.string().optional(),
+    vehicle5Model: z.string().optional(),
+    vehicle6Model: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     const vehicles = [data.vehicle1, data.vehicle2, data.vehicle3, data.vehicle4, data.vehicle5, data.vehicle6]
@@ -195,6 +201,12 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
       vehicle4: "",
       vehicle5: "",
       vehicle6: "",
+      vehicle1Model: "",
+      vehicle2Model: "",
+      vehicle3Model: "",
+      vehicle4Model: "",
+      vehicle5Model: "",
+      vehicle6Model: "",
     },
   });
 
@@ -209,7 +221,7 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
         : calculateAgreementClientFee(includedSpots, vipSpots),
     [category, includedSpots, isVip, vipSpots],
   );
-  const initialDueDate = useMemo(() => addMonths(new Date(), 1), [open]);
+  const initialDueDate = useMemo(() => addMonths(new Date(), 1), []);
   const vehicleFields =
     category === "monthly"
       ? ["vehicle1", "vehicle2", "vehicle3"]
@@ -222,6 +234,16 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
         .map((field) => values[field as keyof FormValues] as string | undefined)
         .map((value) => value?.trim().toUpperCase())
         .filter(Boolean) as string[];
+      const vehicleModels = Object.fromEntries(
+        vehicleFields
+          .map((field) => {
+            const index = field.replace("vehicle", "");
+            const plate = values[field as keyof FormValues] as string | undefined;
+            const model = values[`vehicle${index}Model` as keyof FormValues] as string | undefined;
+            return [plate?.trim().toUpperCase(), model?.trim()] as const;
+          })
+          .filter(([plate, model]) => Boolean(plate && model)),
+      );
 
       await createClient.mutateAsync({
         name: values.name,
@@ -234,6 +256,7 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
         includedSpots: category === "agreement" ? includedSpots : 1,
         vipSpots: category === "agreement" ? vipSpots : values.isVip ? 1 : 0,
         vehicles,
+        vehicleModels,
       });
       form.reset();
       onOpenChange(false);
@@ -369,15 +392,29 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3">
               {vehicleFields.map((field, index) => (
-                <div key={field} className="space-y-2">
-                  <Label>{`Placa ${index + 1}${index === 0 ? " *" : ""}`}</Label>
-                  <Input
-                    placeholder="ABC-1234 ou ABC1D23"
-                    value={form.watch(field as keyof FormValues) as string}
-                    onChange={(event) => form.setValue(field as keyof FormValues, normalizePlate(event.target.value) as never, { shouldValidate: true })}
-                  />
+                <div key={field} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>{`Placa ${index + 1}${index === 0 ? " *" : ""}`}</Label>
+                    <Input
+                      placeholder="ABC-1234 ou ABC1D23"
+                      value={form.watch(field as keyof FormValues) as string}
+                      onChange={(event) => form.setValue(field as keyof FormValues, normalizePlate(event.target.value) as never, { shouldValidate: true })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{`Modelo ${index + 1}`}</Label>
+                    <Input
+                      placeholder="Modelo do veiculo"
+                      value={form.watch(`vehicle${index + 1}Model` as keyof FormValues) as string}
+                      onChange={(event) =>
+                        form.setValue(`vehicle${index + 1}Model` as keyof FormValues, event.target.value as never, {
+                          shouldValidate: true,
+                        })
+                      }
+                    />
+                  </div>
                 </div>
               ))}
             </div>

@@ -45,6 +45,7 @@ export interface CreateVehicleInput {
   spotId: string; // ID da vaga onde o veículo será estacionado
   model: string; // Modelo do veículo
   clientName: string; // Nome do cliente proprietário do veículo
+  driverName?: string; // Nome do condutor do veículo (opcional)
   clientPhone?: string; // Telefone do cliente (opcional)
   observations?: string; // Observações adicionais sobre o veículo ou serviço (opcional)
   prepaidAmount?: number; // Valor pré-pago para o serviço, se aplicável (opcional)
@@ -126,6 +127,8 @@ export interface CreateClientInput {
   includedSpots?: number;
   vipSpots?: number;
   vehicles: string[];
+  vehicleDrivers?: Record<string, string>;
+  vehicleModels?: Record<string, string>;
 }
 
 export interface UpdateClientInput {
@@ -139,11 +142,15 @@ export interface UpdateClientInput {
   isVip?: boolean;
   includedSpots?: number;
   vipSpots?: number;
+  vehicleDrivers?: Record<string, string>;
+  vehicleModels?: Record<string, string>;
 }
 
 export interface AddClientVehicleInput {
   clientId: string;
   plate: string;
+  driverName?: string;
+  model?: string;
 }
 
 export interface ChargeClientInput {
@@ -222,6 +229,38 @@ function normalizePlate(value: string) {
   return value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
 }
 
+function normalizeVehicleDrivers(vehicleDrivers?: Record<string, string>) {
+  if (!vehicleDrivers) {
+    return undefined;
+  }
+
+  const normalizedEntries = Object.entries(vehicleDrivers)
+    .map(([plate, driverName]) => [normalizePlate(plate), driverName.trim()] as const)
+    .filter(([plate, driverName]) => plate.length > 0 && driverName.length > 0);
+
+  if (normalizedEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(normalizedEntries);
+}
+
+function normalizeVehicleModels(vehicleModels?: Record<string, string>) {
+  if (!vehicleModels) {
+    return undefined;
+  }
+
+  const normalizedEntries = Object.entries(vehicleModels)
+    .map(([plate, model]) => [normalizePlate(plate), model.trim()] as const)
+    .filter(([plate, model]) => plate.length > 0 && model.length > 0);
+
+  if (normalizedEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(normalizedEntries);
+}
+
 function normalizeClientVehiclePlates(vehicles: string[]) {
   return vehicles
     .map((plate) => plate.trim().toUpperCase())
@@ -269,6 +308,22 @@ function findClientByPlate(plate: string): Client | undefined {
   return clientsDb.find((client) =>
     client.vehicles.some((registeredPlate) => normalizePlate(registeredPlate) === normalizedPlate),
   );
+}
+
+function findDriverNameForClientPlate(client: Client | undefined, plate: string) {
+  if (!client?.vehicleDrivers) {
+    return undefined;
+  }
+
+  return client.vehicleDrivers[normalizePlate(plate)];
+}
+
+function findVehicleModelForClientPlate(client: Client | undefined, plate: string) {
+  if (!client?.vehicleModels) {
+    return undefined;
+  }
+
+  return client.vehicleModels[normalizePlate(plate)];
 }
 
 function buildRecurringAccessSnapshot(client: Client | undefined) {
@@ -357,7 +412,7 @@ function buildRevenueDataSnapshot(days: number = 7): RevenueData[] {
 
 // Função para calcular e retornar um snapshot dos principais indicadores do dashboard, como número total de veículos, vagas disponíveis, taxa de ocupação, receita do dia, duração média de estadia, número de manobristas ativos, veículos aguardando e tempo médio de espera
 function getDashboardStatsSnapshot(): DashboardStats {
-  const activeVehicles = vehiclesDb.filter((vehicle) => vehicle.status !== "delivered"); // Considera veículos em qualquer status exceto "delivered" como ativos
+  const parkedVehicles = vehiclesDb.filter((vehicle) => vehicle.status === "parked"); // Considera apenas veículos efetivamente estacionados
   const availableSpots = parkingSpotsDb.filter((spot) => spot.status === "available").length; // Conta o número de vagas disponíveis
   const occupiedSpots = parkingSpotsDb.filter((spot) => spot.status === "occupied").length; // Conta o número de vagas ocupadas
   const today = new Date();
@@ -371,10 +426,10 @@ function getDashboardStatsSnapshot(): DashboardStats {
 
   // Calcula a duração média de estadia dos veículos ativos, considerando o tempo desde a entrada até o momento atual, e arredonda para o número inteiro mais próximo
   const avgStayDuration =
-    activeVehicles.length > 0
+    parkedVehicles.length > 0
       ? Math.round(
-          activeVehicles.reduce((acc, vehicle) => acc + (Date.now() - vehicle.entryTime.getTime()) / 60000, 0) /
-            activeVehicles.length,
+          parkedVehicles.reduce((acc, vehicle) => acc + (Date.now() - vehicle.entryTime.getTime()) / 60000, 0) /
+            parkedVehicles.length,
         )
       : 0;
   
@@ -390,7 +445,7 @@ function getDashboardStatsSnapshot(): DashboardStats {
 
   // Retorna um objeto com os principais indicadores do dashboard
   return {
-    totalVehicles: activeVehicles.length, // Número total de veículos ativos (em qualquer status exceto "delivered")
+    totalVehicles: parkedVehicles.length, // Número total de veículos efetivamente estacionados
     availableSpots, // Número de vagas disponíveis
     occupancyRate: parkingSpotsDb.length > 0 ? Math.round((occupiedSpots / parkingSpotsDb.length) * 100) : 0, // Taxa de ocupação calculada como a porcentagem de vagas ocupadas em relação ao total de vagas
     todayRevenue: completedTransactions
@@ -497,9 +552,9 @@ export const valetApi = {
 
   // Cria um novo veículo e o adiciona à base de dados, associando-o a uma vaga disponível e a um manobrista online. Verifica se já existe um veículo ativo com a mesma placa, se a vaga selecionada está
   createVehicle: async (input: CreateVehicleInput): Promise<Vehicle> => {
-    const normalizedPlate = input.plate.toUpperCase();
+    const normalizedPlate = normalizePlate(input.plate);
     const existingActiveVehicle = vehiclesDb.find(
-      (vehicle) => vehicle.status !== "delivered" && vehicle.plate.toUpperCase() === normalizedPlate,
+      (vehicle) => vehicle.status !== "delivered" && normalizePlate(vehicle.plate) === normalizedPlate,
     );
     if (existingActiveVehicle) {
       throw new Error("Ja existe um veiculo ativo com esta placa");
@@ -539,7 +594,7 @@ export const valetApi = {
       id: createId("v"), // Gera um ID único para o veículo
       plate: normalizedPlate, // Armazena a placa do veículo em letras maiúsculas para padronização
       brand: "Não informado", // Marca do veículo, inicialmente definida como "Não informado" (poderia ser preenchida posteriormente com uma função de reconhecimento de marca/modelo a partir da placa)
-      model: input.model, // Modelo do veículo, fornecido na entrada
+      model: findVehicleModelForClientPlate(linkedClient, normalizedPlate) ?? input.model, // Modelo do veículo, fornecido na entrada
       color: "Não informado", // Cor do veículo, inicialmente definida como "Não informado" (poderia ser preenchida posteriormente com uma função de reconhecimento de cor a partir da placa ou de uma inspeção visual) 
       year: new Date().getFullYear(), // Ano do veículo, inicialmente definido como o ano atual (poderia ser preenchido posteriormente com uma função de reconhecimento de ano a partir da placa ou de uma inspeção visual)
       status: "parked", // Status inicial do veículo definido como "parked" (estacionado), indicando que o veículo está na vaga, mas ainda não foi solicitado para saída
@@ -547,6 +602,7 @@ export const valetApi = {
       spotId: selectedSpot.code, // Código da vaga onde o veículo está estacionado, fornecido na entrada 
       attendantId: onlineAttendant.id, // ID do manobrista online que está associado ao veículo, para fins de atribuição de tarefas e monitoramento de desempenho
       clientName: linkedClient?.name ?? input.clientName, // Nome do cliente proprietário do veículo, fornecido na entrada
+      driverName: findDriverNameForClientPlate(linkedClient, normalizedPlate) ?? input.driverName?.trim() ?? undefined,
       clientPhone: linkedClient?.phone ?? input.clientPhone ?? "", // Telefone do cliente, fornecido na entrada ou definido como string vazia se não for fornecido
       observations: input.observations, // Observações adicionais sobre o veículo ou serviço, fornecidas na entrada (opcional)
       contractType: linkedClient?.category ?? input.contractType ?? "hourly", // Tipo de contrato para o serviço, fornecido na entrada ou definido como "hourly" (por hora) se não for fornecido
@@ -1008,7 +1064,10 @@ export const valetApi = {
     }
 
     // Cria uma transação de pagamento para a estadia do veículo, associando-a ao veículo e registrando o valor cobrado, o método de pagamento, e gerando um número de recibo único. O valor cobrado é fornecido na entrada, mas poderia ser calculado com base na duração da estadia e nas tarifas aplicáveis usando o snapshot de precificação armazenado no veículo.
-    const actualAmount = vehicle.linkedClientId && vehicle.billingStatusAtEntry === "current" ? 0 : input.amount;
+    const actualAmount =
+      vehicle.prepaidPaid || (vehicle.linkedClientId && vehicle.billingStatusAtEntry === "current")
+        ? 0
+        : input.amount;
 
     transactionsDb.unshift({
       id: createId("t"),
@@ -1137,6 +1196,8 @@ export const valetApi = {
       cpf: input.cpf,
       cnpj: input.cnpj,
       vehicles: normalizedVehicles,
+      vehicleDrivers: normalizeVehicleDrivers(input.vehicleDrivers),
+      vehicleModels: normalizeVehicleModels(input.vehicleModels),
       category: input.category,
       isVip,
       includedSpots,
@@ -1190,6 +1251,9 @@ export const valetApi = {
       client.monthlyFee = calculateMonthlyClientFee(client.isVip);
     }
 
+    client.vehicleDrivers = normalizeVehicleDrivers(input.vehicleDrivers) ?? client.vehicleDrivers;
+    client.vehicleModels = normalizeVehicleModels(input.vehicleModels) ?? client.vehicleModels;
+
     createActivity({
       id: createId("act"),
       type: "alert",
@@ -1227,6 +1291,18 @@ export const valetApi = {
     }
 
     client.vehicles.push(normalizedPlate);
+    if (input.driverName?.trim()) {
+      client.vehicleDrivers = {
+        ...(client.vehicleDrivers ?? {}),
+        [normalizePlate(normalizedPlate)]: input.driverName.trim(),
+      };
+    }
+    if (input.model?.trim()) {
+      client.vehicleModels = {
+        ...(client.vehicleModels ?? {}),
+        [normalizePlate(normalizedPlate)]: input.model.trim(),
+      };
+    }
     createActivity({
       id: createId("act"),
       type: "entry",
@@ -1245,6 +1321,8 @@ export const valetApi = {
       throw new Error("Cliente nao encontrado");
     }
 
+    const isAgreementCharge = client.category === "agreement";
+
     transactionsDb.unshift({
       id: createId("t"),
       vehicleId: client.vehicles[0] ?? client.id,
@@ -1253,7 +1331,7 @@ export const valetApi = {
       status: "completed",
       createdAt: new Date(),
       completedAt: new Date(),
-      receiptNumber: `CLI-${new Date().getFullYear()}-${String(transactionsDb.length + 1).padStart(4, "0")}`,
+      receiptNumber: `${isAgreementCharge ? "AGR" : "CLI"}-${new Date().getFullYear()}-${String(transactionsDb.length + 1).padStart(4, "0")}`,
       duration: 0,
     });
 
@@ -1263,7 +1341,7 @@ export const valetApi = {
     createActivity({
       id: createId("act"),
       type: "payment",
-      title: "Mensalidade Recebida",
+      title: isAgreementCharge ? "Cobranca de Credenciado Recebida" : "Mensalidade Recebida",
       description: `${client.name} pagou ${client.monthlyFee.toFixed(2)}`,
       time: "agora",
     });

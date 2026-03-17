@@ -25,6 +25,7 @@ export interface Vehicle {
   spotId: string;
   attendantId: string;
   clientName: string;
+  driverName?: string;
   clientPhone: string;
   observations?: string;
   photos?: string[];
@@ -168,6 +169,8 @@ export interface Client {
   cpf?: string;
   cnpj?: string;
   vehicles: string[];
+  vehicleDrivers?: Record<string, string>;
+  vehicleModels?: Record<string, string>;
   category: ClientCategory;
   isVip: boolean;
   includedSpots: number;

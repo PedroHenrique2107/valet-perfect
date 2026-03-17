@@ -58,11 +58,11 @@ const inspectionLabel: Record<(typeof inspectionKeys)[number], string> = {
 
 const schema = z
   .object({
-    isMercosul: z.boolean(),
     plate: z.string(),
     spotId: z.string().min(1, "Selecione a vaga"),
     model: z.string().min(1, "Modelo obrigatorio"),
     clientName: z.string().min(2, "Nome do cliente obrigatorio"),
+    driverName: z.string().optional(),
     clientPhone: z.string().optional(),
     observations: z.string().optional(),
     contractType: z.enum(["hourly", "daily", "monthly", "agreement"]),
@@ -79,13 +79,13 @@ const schema = z
     interior: z.boolean(),
   })
   .superRefine((data, ctx) => {
-    const validPlate = data.isMercosul ? mercosulPlateRegex.test(data.plate) : standardPlateRegex.test(data.plate);
+    const validPlate = mercosulPlateRegex.test(data.plate) || standardPlateRegex.test(data.plate);
 
     if (!validPlate) {
       ctx.addIssue({
         code: "custom",
         path: ["plate"],
-        message: data.isMercosul ? "Placa Mercosul invalida (ex: ABC1D23)" : "Placa invalida (ex: ABC-1234)",
+        message: "Placa invalida (ex: ABC-1234 ou ABC1D23)",
       });
     }
 
@@ -108,15 +108,20 @@ interface VehicleEntryDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function formatStandardPlate(value: string): string {
+function autoFormatPlate(value: string) {
   const raw = value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-  const letters = raw.replace(/\d/g, "").slice(0, 3);
-  const numbers = raw.replace(/\D/g, "").slice(0, 4);
-  return numbers.length > 0 ? `${letters}-${numbers}` : letters;
-}
+  const looksLikeMercosul =
+    raw.length >= 5 && /[A-Z]{3}/.test(raw.slice(0, 3)) && /\d/.test(raw.slice(3, 4)) && /[A-Z]/.test(raw.slice(4, 5));
 
-function formatMercosulPlate(value: string): string {
-  const raw = value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  if (!looksLikeMercosul) {
+    const letters = raw.replace(/\d/g, "").slice(0, 3);
+    const numbers = raw.replace(/\D/g, "").slice(0, 4);
+    return {
+      formatted: numbers.length > 0 ? `${letters}-${numbers}` : letters,
+      isMercosul: false,
+    };
+  }
+
   const pattern: Array<"L" | "N"> = ["L", "L", "L", "N", "L", "N", "N"];
 
   let result = "";
@@ -137,7 +142,10 @@ function formatMercosulPlate(value: string): string {
     }
   }
 
-  return result;
+  return {
+    formatted: result,
+    isMercosul: true,
+  };
 }
 
 function formatPhone(value: string): string {
@@ -162,6 +170,22 @@ function findClientByPlate(clients: Client[], plate: string) {
   );
 }
 
+function findDriverNameByPlate(client: Client | undefined, plate: string) {
+  if (!client?.vehicleDrivers) {
+    return "";
+  }
+
+  return client.vehicleDrivers[normalizePlateLookup(plate)] ?? "";
+}
+
+function findVehicleModelByPlate(client: Client | undefined, plate: string) {
+  if (!client?.vehicleModels) {
+    return "";
+  }
+
+  return client.vehicleModels[normalizePlateLookup(plate)] ?? "";
+}
+
 function isBillingOverdue(client: Client) {
   return client.billingDueDate.getTime() < Date.now();
 }
@@ -178,11 +202,11 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      isMercosul: false,
       plate: "",
       spotId: "",
       model: "",
       clientName: "",
+      driverName: "",
       clientPhone: "",
       observations: "",
       contractType: "hourly",
@@ -200,12 +224,13 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
     },
   });
 
-  const isMercosul = form.watch("isMercosul");
   const plate = form.watch("plate");
   const phone = form.watch("clientPhone") ?? "";
   const prepaidEnabled = form.watch("prepaidEnabled");
   const createInspection = form.watch("createInspection");
   const matchedClient = useMemo(() => findClientByPlate(clients, plate), [clients, plate]);
+  const matchedDriverName = useMemo(() => findDriverNameByPlate(matchedClient, plate), [matchedClient, plate]);
+  const matchedVehicleModel = useMemo(() => findVehicleModelByPlate(matchedClient, plate), [matchedClient, plate]);
   const matchedClientOverdue = matchedClient ? isBillingOverdue(matchedClient) : false;
   const availableSpots = useMemo(() => {
     const available = parkingSpots.filter((spot) => spot.status === "available");
@@ -215,9 +240,13 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
   useEffect(() => {
     if (!matchedClient) return;
     form.setValue("clientName", matchedClient.name, { shouldValidate: true });
+    form.setValue("driverName", matchedDriverName, { shouldValidate: false });
+    if (matchedVehicleModel) {
+      form.setValue("model", matchedVehicleModel, { shouldValidate: true });
+    }
     form.setValue("clientPhone", matchedClient.phone, { shouldValidate: true });
     form.setValue("contractType", matchedClient.category as ContractType, { shouldValidate: true });
-  }, [form, matchedClient]);
+  }, [form, matchedClient, matchedDriverName, matchedVehicleModel]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
@@ -227,6 +256,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
         spotId: values.spotId,
         model: values.model,
         clientName: values.clientName,
+        driverName: values.driverName,
         clientPhone: values.clientPhone,
         observations: values.observations,
         contractType: values.contractType as ContractType,
@@ -267,7 +297,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
       onOpenChange(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Nao foi possivel registrar o veiculo.";
-      if (message.toLowerCase().includes("placa")) {
+      if (message.toLowerCase().includes("ja existe um veiculo ativo com esta placa")) {
         setSubmitError("Esta placa ja esta no sistema.");
         return;
       }
@@ -290,18 +320,18 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                 <Label htmlFor="plate">Placa *</Label>
                 <Input
                   id="plate"
-                  placeholder={isMercosul ? "ABC1D23" : "ABC-1234"}
+                  placeholder="ABC-1234 ou ABC1D23"
                   value={plate}
                   onChange={(event) => {
-                    const formatted = isMercosul ? formatMercosulPlate(event.target.value) : formatStandardPlate(event.target.value);
-                    form.setValue("plate", formatted, { shouldValidate: true });
+                    const nextPlate = autoFormatPlate(event.target.value);
+                    form.setValue("plate", nextPlate.formatted, { shouldValidate: true });
                   }}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="model">Modelo *</Label>
-                <Input id="model" placeholder="Modelo" {...form.register("model")} />
+                <Input id="model" placeholder="Modelo" {...form.register("model")} readOnly={Boolean(matchedVehicleModel)} />
               </div>
 
               <div className="space-y-2">
@@ -329,6 +359,11 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="driverName">Nome do Condutor</Label>
+                <Input id="driverName" placeholder="Nome do condutor" {...form.register("driverName")} />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="clientPhone">Telefone do Cliente</Label>
                 <Input
                   id="clientPhone"
@@ -337,21 +372,6 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                   readOnly={Boolean(matchedClient)}
                   onChange={(event) => form.setValue("clientPhone", formatPhone(event.target.value), { shouldValidate: true })}
                 />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="isMercosul"
-                  checked={isMercosul}
-                  onCheckedChange={(checked) => {
-                    const enabled = Boolean(checked);
-                    form.setValue("isMercosul", enabled);
-                    form.setValue("plate", enabled ? formatMercosulPlate(plate) : formatStandardPlate(plate), { shouldValidate: true });
-                  }}
-                />
-                <Label htmlFor="isMercosul">Placa Mercosul</Label>
               </div>
             </div>
 
@@ -366,6 +386,8 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                     ? "Mensalidade vencida. A entrada e permitida, mas a saida sera cobrada como avulso."
                     : "Mensalidade em dia. A saida sera isenta de cobranca."}
                 </p>
+                {matchedDriverName ? <p className="text-muted-foreground">Condutor vinculado: {matchedDriverName}</p> : null}
+                {matchedVehicleModel ? <p className="text-muted-foreground">Modelo vinculado: {matchedVehicleModel}</p> : null}
               </div>
             ) : null}
 
@@ -382,8 +404,8 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                 <SelectContent>
                   <SelectItem value="hourly">Avulso</SelectItem>
                   <SelectItem value="daily">Avulso (diaria)</SelectItem>
-                  {!matchedClient ? <SelectItem value="agreement">Credenciado manual</SelectItem> : null}
-                  {!matchedClient ? <SelectItem value="monthly">Mensalista manual</SelectItem> : null}
+                  <SelectItem value="agreement">{matchedClient ? "Credenciado" : "Credenciado manual"}</SelectItem>
+                  <SelectItem value="monthly">{matchedClient ? "Mensalista" : "Mensalista manual"}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

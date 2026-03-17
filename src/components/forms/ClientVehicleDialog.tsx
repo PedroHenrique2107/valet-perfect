@@ -17,6 +17,8 @@ import type { Client } from "@/types/valet";
 
 const schema = z.object({
   plate: z.string().min(7, "Informe uma placa valida"),
+  driverName: z.string().optional(),
+  model: z.string().min(2, "Informe o modelo do veiculo"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -38,14 +40,19 @@ export function ClientVehicleDialog({ open, onOpenChange, client }: ClientVehicl
   const [submitError, setSubmitError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { plate: "" },
+    defaultValues: { plate: "", driverName: "", model: "" },
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (!client) return;
     setSubmitError(null);
     try {
-      await addClientVehicle.mutateAsync({ clientId: client.id, plate: values.plate });
+      await addClientVehicle.mutateAsync({
+        clientId: client.id,
+        plate: values.plate,
+        driverName: values.driverName,
+        model: values.model,
+      });
       form.reset();
       onOpenChange(false);
     } catch (error) {
@@ -73,6 +80,18 @@ export function ClientVehicleDialog({ open, onOpenChange, client }: ClientVehicl
             value={form.watch("plate")}
             onChange={(event) => form.setValue("plate", normalizePlate(event.target.value), { shouldValidate: true })}
           />
+          <Input
+            placeholder="Modelo do veiculo"
+            value={form.watch("model") ?? ""}
+            onChange={(event) => form.setValue("model", event.target.value, { shouldValidate: true })}
+          />
+          {client.category === "agreement" ? (
+            <Input
+              placeholder="Nome do condutor"
+              value={form.watch("driverName") ?? ""}
+              onChange={(event) => form.setValue("driverName", event.target.value, { shouldValidate: true })}
+            />
+          ) : null}
           {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

@@ -84,7 +84,10 @@ export function VehicleStatusCard({
           </div>
           <div className="min-w-0">
             <h3 className="font-mono text-base font-bold text-foreground truncate">{vehicle.plate}</h3>
-            <p className="text-xs text-muted-foreground truncate">{vehicle.model} - {vehicle.clientName}</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {vehicle.model} - {vehicle.clientName}
+              {vehicle.driverName ? ` | ${vehicle.driverName}` : ""}
+            </p>
             <div className="mt-1 flex items-center gap-2">
               <span className="text-xs">{contractLabel[vehicle.contractType ?? "hourly"]}</span>
               {vehicle.vipRequired ? (
@@ -156,6 +159,12 @@ export function VehicleStatusCard({
           <User className="h-3.5 w-3.5" />
           <span className="truncate">{vehicle.clientName}</span>
         </div>
+        {vehicle.driverName ? (
+          <div className="col-span-2 flex items-center gap-1.5 text-muted-foreground">
+            <User className="h-3.5 w-3.5" />
+            <span className="truncate">Condutor: {vehicle.driverName}</span>
+          </div>
+        ) : null}
       </div>
 
       {vehicle.status === "requested" && (

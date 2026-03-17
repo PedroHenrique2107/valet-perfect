@@ -66,6 +66,7 @@ export default function ClientsPage() {
         client.email.toLowerCase().includes(normalized) ||
         client.phone.toLowerCase().includes(normalized) ||
         client.vehicles.some((plate) => plate.toLowerCase().includes(normalized)) ||
+        Object.values(client.vehicleDrivers ?? {}).some((driverName) => driverName.toLowerCase().includes(normalized)) ||
         client.cnpj?.toLowerCase().includes(normalized);
       return matchesCategory && matchesSearch;
     });
@@ -282,11 +283,17 @@ function CategoryPanel({
                     Frota cadastrada
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {client.vehicles.map((vehicle) => (
+                    {client.vehicles.map((vehicle) => {
+                      const driverName =
+                        client.vehicleDrivers?.[vehicle.replace(/[^A-Z0-9]/gi, "").toUpperCase()];
+
+                      return (
                       <Badge key={vehicle} variant="outline">
                         {vehicle}
+                        {driverName ? ` • ${driverName}` : ""}
                       </Badge>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </article>

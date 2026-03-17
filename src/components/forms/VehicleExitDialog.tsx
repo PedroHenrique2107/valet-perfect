@@ -73,7 +73,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
 
   const pricing = useMemo(() => {
     if (!selectedVehicle) return { gross: 0, discount: 0, net: 0 };
-    if (recurringCurrent) return { gross: 0, discount: 0, net: 0 };
+    if (selectedVehicle.prepaidPaid || recurringCurrent) return { gross: 0, discount: 0, net: 0 };
     if (recurringOverdue) return calculateAmountByDuration(durationMinutes, "none");
     return calculateAmountByDuration(durationMinutes, form.watch("agreementId"));
   }, [durationMinutes, form, recurringCurrent, recurringOverdue, selectedVehicle]);
@@ -109,6 +109,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
                 {activeVehicles.map((vehicle) => (
                   <SelectItem key={vehicle.id} value={vehicle.id}>
                     {vehicle.plate} - {vehicle.clientName}
+                    {vehicle.driverName ? ` | ${vehicle.driverName}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -119,6 +120,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
             <div className="rounded-md border p-3 text-sm">
               <p><strong>Placa:</strong> {selectedVehicle.plate}</p>
               <p><strong>Cliente:</strong> {selectedVehicle.clientName}</p>
+              <p><strong>Condutor:</strong> {selectedVehicle.driverName || "-"}</p>
               <p><strong>Telefone:</strong> {selectedVehicle.clientPhone || "-"}</p>
               <p><strong>Tempo registrado:</strong> {formatDurationPrecise(durationSeconds)}</p>
               {selectedVehicle.linkedClientId ? (
@@ -165,7 +167,11 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
             </Select>
           )}
 
-          {recurringCurrent ? (
+          {selectedVehicle?.prepaidPaid ? (
+            <div className="rounded-md border border-success/40 bg-success/5 p-3 text-xs">
+              <p><strong>Diaria antecipada:</strong> a saida precisa permanecer zerada.</p>
+            </div>
+          ) : recurringCurrent ? (
             <div className="rounded-md border border-success/40 bg-success/5 p-3 text-xs">
               <p><strong>Saida isenta:</strong> este veiculo esta com a mensalidade em dia.</p>
             </div>
