@@ -2,8 +2,10 @@ export type UserRole = "admin" | "attendant" | "cashier";
 
 export interface SessionUser {
   id: string;
+  email: string;
   name: string;
-  role: UserRole;
+  role: UserRole | null;
+  unitId?: string | null;
 }
 
 export type Permission =

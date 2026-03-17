@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search, Trash2, Users } from "lucide-react";
+import { Plus, Search, Users } from "lucide-react";
 import { AttendantCard } from "@/components/dashboard/AttendantCard";
 import { AttendantCreateDialog } from "@/components/forms/AttendantCreateDialog";
 import { AttendantDetailsDialog } from "@/components/forms/AttendantDetailsDialog";
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useClearAllAttendantsMutation, useAttendantsQuery } from "@/hooks/useValetData";
+import { useAttendantsQuery } from "@/hooks/useValetData";
 import { getStatusLabel, getWorkloadLevel } from "@/lib/attendantMetrics";
 import { useToast } from "@/hooks/use-toast";
 import type { Attendant } from "@/types/valet";
@@ -30,7 +30,6 @@ export default function AttendantsPage() {
   const [selectedAttendant, setSelectedAttendant] = useState<Attendant | null>(null);
 
   const { data: attendants = [] } = useAttendantsQuery();
-  const clearAllAttendants = useClearAllAttendantsMutation();
   const { toast } = useToast();
   const alertedOvertimeIds = useRef<Set<string>>(new Set());
 
@@ -73,15 +72,6 @@ export default function AttendantsPage() {
             <p className="text-muted-foreground">Gestao de equipe por patio e jornada</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
-              disabled={clearAllAttendants.isPending}
-              onClick={() => clearAllAttendants.mutate()}
-            >
-              <Trash2 className="h-4 w-4" />
-              Limpar manobristas (teste)
-            </Button>
             <Button className="gap-2 bg-gradient-primary hover:opacity-90" onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" />
               Novo Manobrista

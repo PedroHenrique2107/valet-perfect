@@ -188,30 +188,6 @@ export function useCreateAttendantMutation() {
   });
 }
 
-export function useClearAllVehiclesMutation() {
-  const invalidate = useInvalidateCoreQueries();
-  return useMutation({
-    mutationFn: valetApi.clearAllVehicles,
-    onSuccess: invalidate,
-  });
-}
-
-export function useClearAllAttendantsMutation() {
-  const invalidate = useInvalidateCoreQueries();
-  return useMutation({
-    mutationFn: valetApi.clearAllAttendants,
-    onSuccess: invalidate,
-  });
-}
-
-export function useClearAllClientsMutation() {
-  const invalidate = useInvalidateCoreQueries();
-  return useMutation({
-    mutationFn: valetApi.clearAllClients,
-    onSuccess: invalidate,
-  });
-}
-
 export function useUpdateVehicleSpotMutation() {
   const invalidate = useInvalidateCoreQueries();
   return useMutation({

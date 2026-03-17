@@ -193,17 +193,25 @@ export function ParkingFloorManagerDialog({
   };
 
   const handleCreateFloor = async () => {
-    const createdSpots = await createParkingFloor.mutateAsync({
-      floor: nextFloor,
-      totalSpots,
-      spotCategories,
-      sectionLayout: sectionPlan,
-    });
-    toast({
-      title: "Piso criado",
-      description: `Piso ${nextFloor} criado com ${createdSpots.length} vaga(s).`,
-    });
-    onOpenChange(false);
+    try {
+      await createParkingFloor.mutateAsync({
+        floor: nextFloor,
+        totalSpots,
+        spotCategories,
+        sectionLayout: sectionPlan,
+      });
+      toast({
+        title: "Piso criado",
+        description: `Piso ${nextFloor} solicitado com ${totalSpots} vaga(s) planejada(s).`,
+      });
+      onOpenChange(false);
+    } catch (error) {
+      toast({
+        title: "Nao foi possivel criar o piso",
+        description: error instanceof Error ? error.message : "Tente novamente apos revisar a configuracao.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDeleteFloor = async (value: string) => {
@@ -213,11 +221,19 @@ export function ParkingFloorManagerDialog({
     const confirmed = window.confirm(`Excluir o piso ${floor} e todas as vagas sem veiculo vinculado?`);
     if (!confirmed) return;
 
-    const result = await deleteParkingFloor.mutateAsync(floor);
-    toast({
-      title: "Piso excluido",
-      description: `Piso ${result.floor} removido com ${result.removedSpots} vaga(s).`,
-    });
+    try {
+      const result = await deleteParkingFloor.mutateAsync(floor);
+      toast({
+        title: "Piso excluido",
+        description: `Piso ${result.floor} removido do mapa.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Nao foi possivel excluir o piso",
+        description: error instanceof Error ? error.message : "Verifique se existem vagas ou veiculos vinculados.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -397,7 +413,7 @@ export function ParkingFloorManagerDialog({
 
             <div className="space-y-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Selecionar piso</p>
-              <Select onValueChange={handleDeleteFloor}>
+              <Select onValueChange={handleDeleteFloor} disabled={floorSummaries.length === 0 || deleteParkingFloor.isPending}>
                 <SelectTrigger>
                   <SelectValue placeholder="Escolha um piso para excluir" />
                 </SelectTrigger>

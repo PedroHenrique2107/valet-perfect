@@ -10,7 +10,6 @@ import {
   Search,
   ShieldCheck,
   Star,
-  Trash2,
   UserCircle,
 } from "lucide-react";
 import { ClientCreateDialog } from "@/components/forms/ClientCreateDialog";
@@ -28,7 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useCan } from "@/contexts/AuthContext";
-import { useClearAllClientsMutation, useClientsQuery } from "@/hooks/useValetData";
+import { useClientsQuery } from "@/hooks/useValetData";
 import { formatCurrencyBRL, formatDateTimeBR } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Client } from "@/types/valet";
@@ -46,7 +45,6 @@ function isOverdue(client: Client) {
 
 export default function ClientsPage() {
   const { data: clients = [] } = useClientsQuery();
-  const clearAllClients = useClearAllClientsMutation();
   const canCreateClient = useCan("create_client");
   const [createOpen, setCreateOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -94,15 +92,6 @@ export default function ClientsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
-              disabled={clients.length === 0 || clearAllClients.isPending}
-              onClick={() => clearAllClients.mutate()}
-            >
-              <Trash2 className="h-4 w-4" />
-              Limpar clientes
-            </Button>
             <Button
               className="gap-2 bg-gradient-primary hover:opacity-90"
               onClick={() => setCreateOpen(true)}

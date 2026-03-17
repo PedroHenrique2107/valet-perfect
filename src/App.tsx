@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import NotFound from "./pages/NotFound";
 
 const Index = lazy(() => import("./pages/Index"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
 const VehiclesPage = lazy(() => import("./pages/VehiclesPage"));
 const AttendantsPage = lazy(() => import("./pages/AttendantsPage"));
 const ParkingMapPage = lazy(() => import("./pages/ParkingMapPage"));
@@ -34,6 +35,7 @@ const App = () => (
         <BrowserRouter>
           <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Carregando...</div>}>
             <Routes>
+              <Route path="/login" element={<LoginPage />} />
               <Route
                 path="/"
                 element={

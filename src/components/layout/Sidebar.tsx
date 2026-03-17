@@ -18,18 +18,10 @@ import {
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getRoleDisplayName, useAuth } from "@/contexts/AuthContext";
 import { useVehiclesQuery } from "@/hooks/useValetData";
 import { cn } from "@/lib/utils";
-import type { UserRole } from "@/types/auth";
 
 interface NavItem {
   icon: React.ElementType;
@@ -58,7 +50,7 @@ const bottomNavItems: NavItem[] = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
-  const { user, setRole } = useAuth();
+  const { user, signOut } = useAuth();
   const { data: vehicles = [] } = useVehiclesQuery();
   const parkedVehiclesCount = vehicles.filter((vehicle) => vehicle.status === "parked").length;
 
@@ -169,27 +161,23 @@ export function Sidebar() {
           )}
         >
           <Avatar className="h-9 w-9 flex-shrink-0">
-            <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=Pedro Henrique" />
-            <AvatarFallback>AD</AvatarFallback>
+            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.name ?? "User")}`} />
+            <AvatarFallback>{(user?.name ?? "U").slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="min-w-0 flex-1 space-y-1">
-              <p className="truncate text-sm font-medium">{user.name}</p>
-              <p className="truncate text-xs text-muted-foreground">{getRoleDisplayName(user.role)}</p>
-              <Select value={user.role} onValueChange={(value) => setRole(value as UserRole)}>
-                <SelectTrigger className="h-7 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                  <SelectItem value="attendant">Manobrista</SelectItem>
-                  <SelectItem value="cashier">Caixa</SelectItem>
-                </SelectContent>
-              </Select>
+              <p className="truncate text-sm font-medium">{user?.name ?? "Usuário"}</p>
+              <p className="truncate text-xs text-muted-foreground">{user?.email ?? "Sem e-mail"}</p>
+              <p className="truncate text-xs text-muted-foreground">{getRoleDisplayName(user?.role)}</p>
             </div>
           )}
           {!collapsed && (
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              onClick={() => void signOut()}
+            >
               <LogOut className="h-4 w-4" />
             </Button>
           )}

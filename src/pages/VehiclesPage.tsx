@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Car, Grid3X3, List, Plus, Search, Trash2 } from "lucide-react";
+import { Car, Grid3X3, List, Plus, Search } from "lucide-react";
 import { COMPANY_NAME, DEFAULT_UNIT_NAME } from "@/config/pricing";
 import { VehicleStatusCard } from "@/components/dashboard/VehicleStatusCard";
 import { VehicleDetailsDialog } from "@/components/forms/VehicleDetailsDialog";
@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { useCan } from "@/contexts/AuthContext";
 import {
   useAttendantsQuery,
-  useClearAllVehiclesMutation,
   useRequestVehicleMutation,
   useTransactionsQuery,
   useVehiclesQuery,
@@ -51,7 +50,6 @@ export default function VehiclesPage() {
   const { data: attendants = [] } = useAttendantsQuery();
   const { data: transactions = [] } = useTransactionsQuery();
   const requestVehicle = useRequestVehicleMutation();
-  const clearAllVehicles = useClearAllVehiclesMutation();
 
   const filteredVehicles = filterVehicles(vehicles, searchQuery, statusFilter);
 
@@ -122,15 +120,6 @@ export default function VehiclesPage() {
             <p className="text-muted-foreground">Gerencie todos os veiculos no estacionamento</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
-              disabled={vehicles.length === 0 || clearAllVehicles.isPending}
-              onClick={() => clearAllVehicles.mutate()}
-            >
-              <Trash2 className="h-4 w-4" />
-              Limpar carros (teste)
-            </Button>
             <Button
               className="gap-2 bg-gradient-primary hover:opacity-90"
               onClick={() => setEntryOpen(true)}
