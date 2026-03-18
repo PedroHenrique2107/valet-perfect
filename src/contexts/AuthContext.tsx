@@ -17,6 +17,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const ROLE_NAMES: Record<UserRole, string> = {
   admin: "Administrador",
+  leader: "Lider de Posto",
   attendant: "Manobrista",
   cashier: "Caixa",
 };
@@ -31,7 +32,7 @@ interface UserUnitRoleRow {
 }
 
 function isKnownRole(value: string | null | undefined): value is UserRole {
-  return value === "admin" || value === "attendant" || value === "cashier";
+  return value === "admin" || value === "leader" || value === "attendant" || value === "cashier";
 }
 
 function buildSessionUser(authUser: User, overrides?: Partial<SessionUser>): SessionUser {

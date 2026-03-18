@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useUpdateClientMutation } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { formatCurrencyBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { calculateAgreementClientFee, calculateMonthlyClientFee } from "@/config/pricing";
@@ -62,6 +63,7 @@ interface ClientEditDialogProps {
 
 export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialogProps) {
   const updateClient = useUpdateClientMutation();
+  const settings = useAppSettings();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [driverNames, setDriverNames] = useState<Record<string, string>>({});
   const [vehicleModels, setVehicleModels] = useState<Record<string, string>>({});
@@ -272,7 +274,7 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
             <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
               <div className="flex items-center gap-2">
                 <Checkbox id="edit-vip" checked={isVip} onCheckedChange={(checked) => form.setValue("isVip", Boolean(checked), { shouldValidate: true })} />
-                <Label htmlFor="edit-vip">Cliente VIP</Label>
+                <Label htmlFor="edit-vip">Cliente VIP ({settings.monthlyVipMultiplier}x sobre a mensalidade base)</Label>
               </div>
             </div>
           )}

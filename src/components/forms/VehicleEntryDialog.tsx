@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { DEFAULT_UNIT_NAME } from "@/config/pricing";
 import { PrepaidChargeDialog, type PrepaidChargeSelection } from "@/components/forms/PrepaidChargeDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useClientsQuery, useCreateVehicleMutation, useParkingSpotsQuery } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrencyBRL } from "@/lib/format";
 import type { Client, ContractType } from "@/types/valet";
@@ -194,6 +194,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
   const createVehicle = useCreateVehicleMutation();
   const { data: parkingSpots = [] } = useParkingSpotsQuery();
   const { data: clients = [] } = useClientsQuery();
+  const settings = useAppSettings();
   const { toast } = useToast();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [prepaidSelection, setPrepaidSelection] = useState<PrepaidChargeSelection | null>(null);
@@ -210,8 +211,8 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
       clientPhone: "",
       observations: "",
       contractType: "hourly",
-      createInspection: false,
-      prepaidEnabled: false,
+      createInspection: settings.entryDefaults.createInspection,
+      prepaidEnabled: settings.entryDefaults.prepaidEnabled,
       leftSide: false,
       rightSide: false,
       frontBumper: false,
@@ -238,6 +239,33 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
   }, [matchedClient?.isVip, parkingSpots]);
 
   useEffect(() => {
+    if (!open) return;
+    form.reset({
+      plate: "",
+      spotId: "",
+      model: "",
+      clientName: "",
+      driverName: "",
+      clientPhone: "",
+      observations: "",
+      contractType: "hourly",
+      createInspection: settings.entryDefaults.createInspection,
+      prepaidEnabled: settings.entryDefaults.prepaidEnabled,
+      leftSide: false,
+      rightSide: false,
+      frontBumper: false,
+      rearBumper: false,
+      wheels: false,
+      mirrors: false,
+      roof: false,
+      windows: false,
+      interior: false,
+    });
+    setPrepaidSelection(null);
+    setSubmitError(null);
+  }, [form, open, settings.entryDefaults.createInspection, settings.entryDefaults.prepaidEnabled]);
+
+  useEffect(() => {
     if (!matchedClient) return;
     form.setValue("clientName", matchedClient.name, { shouldValidate: true });
     form.setValue("driverName", matchedDriverName, { shouldValidate: false });
@@ -260,7 +288,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
         clientPhone: values.clientPhone,
         observations: values.observations,
         contractType: values.contractType as ContractType,
-        unitName: DEFAULT_UNIT_NAME,
+        unitName: settings.unitName,
         createInspection: values.createInspection,
         inspection: values.createInspection
           ? {

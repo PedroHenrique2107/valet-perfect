@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Activity, Attendant, DashboardStats, OccupancyData, ParkingSpot, RevenueData } from "@/types/valet";
+import type { PurgeResult, Unit, UnitInvitation, UnitMember } from "@/types/management";
 import { addClientVehicle, chargeClient, createClient, listClients, updateClient } from "@/services/clients.service";
 import {
   EMPTY_DASHBOARD_STATS,
@@ -28,10 +29,15 @@ import type {
   CreateParkingFloorInput,
   CreateParkingSpotInput,
   CreateVehicleInput,
+  CreateUnitInput,
+  CreateUnitInvitationInput,
   MoveParkingSpotInput,
+  PurgeUnitDataInput,
   RegisterExitInput,
+  RemoveUnitMemberInput,
   UpdateClientInput,
   UpdateParkingSpotConfigInput,
+  UpdateUnitMemberRoleInput,
   UpdateVehicleSpotInput,
 } from "@/services/valet.types";
 
@@ -44,12 +50,56 @@ export type {
   CreateParkingFloorInput,
   CreateParkingSpotInput,
   CreateVehicleInput,
+  CreateUnitInput,
+  CreateUnitInvitationInput,
   MoveParkingSpotInput,
+  PurgeUnitDataInput,
   RegisterExitInput,
+  RemoveUnitMemberInput,
   UpdateClientInput,
   UpdateParkingSpotConfigInput,
+  UpdateUnitMemberRoleInput,
   UpdateVehicleSpotInput,
 } from "@/services/valet.types";
+
+function toUnit(row: Record<string, unknown>): Unit {
+  return {
+    id: String(row.id ?? ""),
+    name: String(row.name ?? ""),
+    location: typeof row.location === "string" ? row.location : undefined,
+    createdAt: new Date(String(row.created_at ?? new Date().toISOString())),
+  };
+}
+
+function toUnitMember(row: Record<string, unknown>): UnitMember {
+  return {
+    userId: String(row.user_id ?? ""),
+    unitId: String(row.unit_id ?? ""),
+    role: String(row.role ?? "attendant") as UnitMember["role"],
+    fullName: String(row.full_name ?? ""),
+    email: String(row.email ?? ""),
+    phone: typeof row.phone === "string" ? row.phone : undefined,
+    unitName: String(row.unit_name ?? "Unidade"),
+    unitLocation: typeof row.unit_location === "string" ? row.unit_location : undefined,
+    createdAt: new Date(String(row.created_at ?? new Date().toISOString())),
+  };
+}
+
+function toUnitInvitation(row: Record<string, unknown>): UnitInvitation {
+  return {
+    id: String(row.id ?? ""),
+    unitId: String(row.unit_id ?? ""),
+    name: String(row.name ?? ""),
+    email: String(row.email ?? ""),
+    phone: typeof row.phone === "string" ? row.phone : undefined,
+    role: String(row.role ?? "attendant") as UnitInvitation["role"],
+    status: String(row.status ?? "pending") as UnitInvitation["status"],
+    workPeriodStart: String(row.work_period_start ?? "08:00"),
+    workPeriodEnd: String(row.work_period_end ?? "17:00"),
+    maxWorkHours: Number(row.max_work_hours ?? 8),
+    createdAt: new Date(String(row.created_at ?? new Date().toISOString())),
+  };
+}
 
 async function listAttendants(): Promise<Attendant[]> {
   if (!isSupabaseConfigured()) {
@@ -269,6 +319,125 @@ async function moveParkingSpot(input: MoveParkingSpotInput): Promise<ParkingSpot
   return toParkingSpot(data);
 }
 
+async function listUnits(): Promise<Unit[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase.from("units").select("*").order("created_at", { ascending: true });
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map(toUnit);
+}
+
+async function listUnitMembers(): Promise<UnitMember[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase.from("unit_members_view").select("*").order("created_at", { ascending: true });
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map(toUnitMember);
+}
+
+async function listUnitInvitations(): Promise<UnitInvitation[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase.from("unit_invitations").select("*").order("created_at", { ascending: false });
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map(toUnitInvitation);
+}
+
+async function createUnit(input: CreateUnitInput): Promise<Unit> {
+  ensureSupabaseConfigured();
+  const { data, error } = await supabase.rpc("create_unit", {
+    p_name: input.name,
+    p_location: input.location ?? null,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return toUnit(data);
+}
+
+async function createUnitInvitation(input: CreateUnitInvitationInput): Promise<UnitInvitation> {
+  ensureSupabaseConfigured();
+  const { data, error } = await supabase.rpc("create_unit_invitation", {
+    p_name: input.name,
+    p_email: input.email,
+    p_phone: input.phone ?? null,
+    p_role: input.role,
+    p_unit_id: input.unitId ?? null,
+    p_work_period_start: input.workPeriodStart,
+    p_work_period_end: input.workPeriodEnd,
+    p_max_work_hours: input.maxWorkHours,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return toUnitInvitation(data);
+}
+
+async function updateUnitMemberRole(input: UpdateUnitMemberRoleInput) {
+  ensureSupabaseConfigured();
+  const { data, error } = await supabase.rpc("update_unit_member_role", {
+    p_user_id: input.userId,
+    p_unit_id: input.unitId,
+    p_role: input.role,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+async function removeUnitMember(input: RemoveUnitMemberInput) {
+  ensureSupabaseConfigured();
+  const { error } = await supabase.rpc("remove_unit_member", {
+    p_user_id: input.userId,
+    p_unit_id: input.unitId,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return input;
+}
+
+async function purgeUnitData(input: PurgeUnitDataInput): Promise<PurgeResult> {
+  ensureSupabaseConfigured();
+  const { data, error } = await supabase.rpc("purge_unit_operational_data", {
+    p_delete_clients: input.deleteClients,
+    p_delete_attendants: input.deleteAttendants,
+    p_delete_vehicles: input.deleteVehicles,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    unitId: String(data.unitId ?? ""),
+    deletedTransactions: Number(data.deletedTransactions ?? 0),
+    deletedVehicles: Number(data.deletedVehicles ?? 0),
+    deletedClients: Number(data.deletedClients ?? 0),
+    deletedAttendantRoles: Number(data.deletedAttendantRoles ?? 0),
+    deletedAttendantInvitations: Number(data.deletedAttendantInvitations ?? 0),
+  };
+}
+
 export const valetApi = {
   getVehicles: listVehicleStays,
   getAttendants: listAttendants,
@@ -295,4 +464,12 @@ export const valetApi = {
   deleteParkingFloor: (floor: number) => deleteParkingFloor(floor),
   deleteParkingSpot: (spotId: string) => deleteParkingSpot(spotId),
   moveParkingSpot: (input: MoveParkingSpotInput) => moveParkingSpot(input),
+  getUnits: listUnits,
+  getUnitMembers: listUnitMembers,
+  getUnitInvitations: listUnitInvitations,
+  createUnit: (input: CreateUnitInput) => createUnit(input),
+  createUnitInvitation: (input: CreateUnitInvitationInput) => createUnitInvitation(input),
+  updateUnitMemberRole: (input: UpdateUnitMemberRoleInput) => updateUnitMemberRole(input),
+  removeUnitMember: (input: RemoveUnitMemberInput) => removeUnitMember(input),
+  purgeUnitData: (input: PurgeUnitDataInput) => purgeUnitData(input),
 };

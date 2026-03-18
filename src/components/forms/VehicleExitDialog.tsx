@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { AGREEMENT_OPTIONS, calculateAmountByDuration } from "@/config/pricing";
+import { calculateAmountByDuration } from "@/config/pricing";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRegisterVehicleExitMutation, useVehiclesQuery } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { formatCurrencyBRL, formatDurationPrecise } from "@/lib/format";
 
 const schema = z.object({
@@ -39,6 +40,7 @@ interface VehicleExitDialogProps {
 export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: VehicleExitDialogProps) {
   const { data: vehicles = [] } = useVehiclesQuery();
   const registerExit = useRegisterVehicleExitMutation();
+  const settings = useAppSettings();
   const [now, setNow] = useState(Date.now());
 
   const activeVehicles = vehicles.filter((vehicle) => vehicle.status !== "delivered");
@@ -141,7 +143,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
                 <SelectValue placeholder="Convenio" />
               </SelectTrigger>
               <SelectContent>
-                {AGREEMENT_OPTIONS.map((agreement) => (
+                {settings.agreementOptions.map((agreement) => (
                   <SelectItem key={agreement.id} value={agreement.id}>
                     {agreement.label}
                   </SelectItem>

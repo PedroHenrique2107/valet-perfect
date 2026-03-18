@@ -14,8 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DEFAULT_UNIT_NAME } from "@/config/pricing";
 import { useParkingSpotsQuery, useUpdateVehicleSpotMutation } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { formatCurrencyBRL, formatDateTimeBR, formatDurationPrecise } from "@/lib/format";
 import type { Attendant, Transaction, Vehicle } from "@/types/valet";
 
@@ -61,6 +61,7 @@ export function VehicleDetailsDialog({
   const [selectedSpot, setSelectedSpot] = useState("");
   const { data: parkingSpots = [] } = useParkingSpotsQuery();
   const updateVehicleSpot = useUpdateVehicleSpotMutation();
+  const settings = useAppSettings();
 
   useEffect(() => {
     if (!open || !vehicle || vehicle.status === "delivered") return;
@@ -129,7 +130,7 @@ export function VehicleDetailsDialog({
             value={contractLabel[vehicle.contractType ?? "hourly"]}
             strikethrough={vehicle.contractType === "monthly"}
           />
-          <Field label="Unidade (Nome do patio)" value={vehicle.unitName ?? DEFAULT_UNIT_NAME} />
+          <Field label="Unidade (Nome do patio)" value={vehicle.unitName ?? settings.unitName} />
           <Field label="Operador que recebeu" value={attendantName} />
           <Field label="Data/hora de entrada" value={formatDateTimeBR(vehicle.entryTime)} />
           <Field label="Status atual" value={statusLabel[vehicle.status]} />

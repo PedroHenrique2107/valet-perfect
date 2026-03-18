@@ -28,6 +28,7 @@ import {
   useUpdateParkingSpotConfigMutation,
   useVehiclesQuery,
 } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { getGlobalSectionOrder, sortSectionsByOrder } from "@/lib/parkingLayout";
 import type { ParkingSpot } from "@/types/valet";
 
@@ -53,6 +54,7 @@ export default function ParkingMapPage() {
   const updateParkingSpotConfig = useUpdateParkingSpotConfigMutation();
   const deleteParkingSpot = useDeleteParkingSpotMutation();
   const { toast } = useToast();
+  const settings = useAppSettings();
 
   const [selectedFloor, setSelectedFloor] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<ParkingSpot["status"] | "all">("all");
@@ -143,8 +145,8 @@ export default function ParkingMapPage() {
 
   const alerts = useMemo(() => {
     const list: { id: string; title: string; description: string; icon: typeof AlertTriangle }[] = [];
-    const occupancyThreshold = 80;
-    const maintenanceThreshold = 25;
+    const occupancyThreshold = settings.alerts.occupancyThreshold;
+    const maintenanceThreshold = settings.alerts.maintenanceThreshold;
 
     const sectionGroups = parkingSpots.reduce((acc, spot) => {
       const key = `${spot.floor}-${spot.section}`;
@@ -183,7 +185,7 @@ export default function ParkingMapPage() {
         });
       }
 
-      if (vipOccupied > 0 && vipAvailable === 0) {
+      if (settings.alerts.vipSlackEnabled && vipOccupied > 0 && vipAvailable === 0) {
         list.push({
           id: `${key}-vip-demand`,
           title: `Conflito entre vagas VIP e demanda real`,
@@ -194,7 +196,7 @@ export default function ParkingMapPage() {
     });
 
     return list.slice(0, 6);
-  }, [parkingSpots]);
+  }, [parkingSpots, settings.alerts.maintenanceThreshold, settings.alerts.occupancyThreshold, settings.alerts.vipSlackEnabled]);
 
   const handleRefresh = async () => {
     await refetch();

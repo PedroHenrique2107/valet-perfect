@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Car, Grid3X3, List, Plus, Search } from "lucide-react";
-import { COMPANY_NAME, DEFAULT_UNIT_NAME } from "@/config/pricing";
 import { VehicleStatusCard } from "@/components/dashboard/VehicleStatusCard";
 import { VehicleDetailsDialog } from "@/components/forms/VehicleDetailsDialog";
 import { VehicleEntryDialog } from "@/components/forms/VehicleEntryDialog";
@@ -18,6 +17,7 @@ import {
   useTransactionsQuery,
   useVehiclesQuery,
 } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { filterVehicles } from "@/lib/selectors";
 import { cn } from "@/lib/utils";
 import type { Vehicle, VehicleStatus } from "@/types/valet";
@@ -45,6 +45,7 @@ export default function VehiclesPage() {
 
   const canCreateVehicle = useCan("create_vehicle");
   const canRegisterExit = useCan("register_exit");
+  const settings = useAppSettings();
 
   const { data: vehicles = [] } = useVehiclesQuery();
   const { data: attendants = [] } = useAttendantsQuery();
@@ -106,7 +107,7 @@ export default function VehiclesPage() {
     if (!vehicle.clientPhone) return;
 
     const phone = vehicle.clientPhone.replace(/\D/g, "");
-    const message = `${COMPANY_NAME} - ${DEFAULT_UNIT_NAME}: Seu veiculo ja esta disponivel para retirada. Estamos aguardando voce!`;
+    const message = `${settings.companyName} - ${settings.unitName}: Seu veiculo ja esta disponivel para retirada. Estamos aguardando voce!`;
     const smsUrl = `sms:${phone}?body=${encodeURIComponent(message)}`;
     window.open(smsUrl, "_self");
   };

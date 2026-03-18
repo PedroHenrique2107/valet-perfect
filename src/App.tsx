@@ -15,6 +15,7 @@ const AttendantsPage = lazy(() => import("./pages/AttendantsPage"));
 const ParkingMapPage = lazy(() => import("./pages/ParkingMapPage"));
 const FinancialPage = lazy(() => import("./pages/FinancialPage"));
 const ClientsPage = lazy(() => import("./pages/ClientsPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,7 +40,7 @@ const App = () => (
               <Route
                 path="/"
                 element={
-                  <ProtectedRoute allowedRoles={["admin", "attendant", "cashier"]}>
+                  <ProtectedRoute allowedRoles={["admin", "leader", "attendant", "cashier"]}>
                     <Index />
                   </ProtectedRoute>
                 }
@@ -47,7 +48,7 @@ const App = () => (
               <Route
                 path="/vehicles"
                 element={
-                  <ProtectedRoute allowedRoles={["admin", "attendant", "cashier"]}>
+                  <ProtectedRoute allowedRoles={["admin", "leader", "attendant", "cashier"]}>
                     <VehiclesPage />
                   </ProtectedRoute>
                 }
@@ -55,7 +56,7 @@ const App = () => (
               <Route
                 path="/attendants"
                 element={
-                  <ProtectedRoute allowedRoles={["admin", "attendant"]}>
+                  <ProtectedRoute allowedRoles={["admin", "leader", "attendant"]}>
                     <AttendantsPage />
                   </ProtectedRoute>
                 }
@@ -63,7 +64,7 @@ const App = () => (
               <Route
                 path="/parking-map"
                 element={
-                  <ProtectedRoute allowedRoles={["admin", "attendant"]}>
+                  <ProtectedRoute allowedRoles={["admin", "leader", "attendant"]}>
                     <ParkingMapPage />
                   </ProtectedRoute>
                 }
@@ -71,7 +72,7 @@ const App = () => (
               <Route
                 path="/financial"
                 element={
-                  <ProtectedRoute allowedRoles={["admin", "cashier"]}>
+                  <ProtectedRoute allowedRoles={["admin", "leader", "cashier"]}>
                     <FinancialPage />
                   </ProtectedRoute>
                 }
@@ -79,8 +80,16 @@ const App = () => (
               <Route
                 path="/clients"
                 element={
-                  <ProtectedRoute allowedRoles={["admin", "attendant", "cashier"]}>
+                  <ProtectedRoute allowedRoles={["admin", "leader", "attendant", "cashier"]}>
                     <ClientsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute allowedRoles={["admin", "leader", "attendant", "cashier"]}>
+                    <SettingsPage />
                   </ProtectedRoute>
                 }
               />

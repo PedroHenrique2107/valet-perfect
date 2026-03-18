@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAttendantsQuery } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { getStatusLabel, getWorkloadLevel } from "@/lib/attendantMetrics";
 import { useToast } from "@/hooks/use-toast";
 import type { Attendant } from "@/types/valet";
@@ -31,6 +32,7 @@ export default function AttendantsPage() {
 
   const { data: attendants = [] } = useAttendantsQuery();
   const { toast } = useToast();
+  const settings = useAppSettings();
   const alertedOvertimeIds = useRef<Set<string>>(new Set());
 
   const filteredAttendants = useMemo(() => {
@@ -47,7 +49,7 @@ export default function AttendantsPage() {
   useEffect(() => {
     attendants.forEach((attendant) => {
       const level = getWorkloadLevel(attendant);
-      if (level === "exceeded" && !alertedOvertimeIds.current.has(attendant.id)) {
+      if (settings.alerts.overtimeEnabled && level === "exceeded" && !alertedOvertimeIds.current.has(attendant.id)) {
         alertedOvertimeIds.current.add(attendant.id);
         toast({
           title: "Alerta de jornada excedida",
@@ -55,11 +57,11 @@ export default function AttendantsPage() {
           variant: "destructive",
         });
       }
-      if (level !== "exceeded") {
+      if (level !== "exceeded" || !settings.alerts.overtimeEnabled) {
         alertedOvertimeIds.current.delete(attendant.id);
       }
     });
-  }, [attendants, toast]);
+  }, [attendants, settings.alerts.overtimeEnabled, toast]);
 
   const onlineCount = attendants.filter((attendant) => attendant.isOnline).length;
 

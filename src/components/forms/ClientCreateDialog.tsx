@@ -22,14 +22,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  AGREEMENT_STANDARD_SPOT_RATE,
-  AGREEMENT_VIP_MULTIPLIER,
-  MONTHLY_STANDARD_RATE,
-  MONTHLY_VIP_MULTIPLIER,
   calculateAgreementClientFee,
   calculateMonthlyClientFee,
 } from "@/config/pricing";
 import { useCreateClientMutation } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { formatCurrencyBRL, formatDateTimeBR } from "@/lib/format";
 
 const plateRegex = /^(?:[A-Z]{3}-\d{4}|[A-Z]{3}\d[A-Z]\d{2})$/;
@@ -182,6 +179,7 @@ function CounterField({
 
 export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogProps) {
   const createClient = useCreateClientMutation();
+  const settings = useAppSettings();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -364,7 +362,7 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
                   onCheckedChange={(checked) => form.setValue("isVip", Boolean(checked), { shouldValidate: true })}
                 />
                 <Label htmlFor="client-vip">
-                  Cliente VIP (+40% sobre {formatCurrencyBRL(MONTHLY_STANDARD_RATE)})
+                  Cliente VIP (+{Math.round((settings.monthlyVipMultiplier - 1) * 100)}% sobre {formatCurrencyBRL(settings.monthlyStandardRate)})
                 </Label>
               </div>
               <p className="text-sm text-muted-foreground">
@@ -377,7 +375,7 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
             <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
               <p className="text-sm font-medium text-foreground">VIP para credenciado</p>
               <p className="text-sm text-muted-foreground">
-                O valor das vagas VIP ja e calculado automaticamente com acrescimo de 20%. Vaga comum: {formatCurrencyBRL(AGREEMENT_STANDARD_SPOT_RATE)}. Vaga VIP: {formatCurrencyBRL(AGREEMENT_STANDARD_SPOT_RATE * AGREEMENT_VIP_MULTIPLIER)}.
+                O valor das vagas VIP ja e calculado automaticamente com acrescimo configurado. Vaga comum: {formatCurrencyBRL(settings.agreementStandardSpotRate)}. Vaga VIP: {formatCurrencyBRL(settings.agreementStandardSpotRate * settings.agreementVipMultiplier)}.
               </p>
             </div>
           ) : null}
@@ -425,7 +423,7 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
             <p className="mt-1 text-2xl font-bold text-primary">{formatCurrencyBRL(fee)}</p>
             {category === "monthly" && isVip ? (
               <p className="mt-1 text-sm text-muted-foreground">
-                Mensalidade VIP usa multiplicador de {MONTHLY_VIP_MULTIPLIER}x.
+                Mensalidade VIP usa multiplicador de {settings.monthlyVipMultiplier}x.
               </p>
             ) : null}
           </div>

@@ -1,4 +1,5 @@
 import type { Transaction } from "@/types/valet";
+import type { UserRole } from "@/types/auth";
 
 export interface CreateVehicleInput {
   plate: string;
@@ -129,4 +130,37 @@ export interface CreateAttendantInput {
   workPeriodStart: string;
   workPeriodEnd: string;
   maxWorkHours: number;
+}
+
+export interface CreateUnitInput {
+  name: string;
+  location?: string;
+}
+
+export interface CreateUnitInvitationInput {
+  unitId?: string;
+  name: string;
+  email: string;
+  phone?: string;
+  role: Exclude<UserRole, "admin">;
+  workPeriodStart: string;
+  workPeriodEnd: string;
+  maxWorkHours: number;
+}
+
+export interface UpdateUnitMemberRoleInput {
+  userId: string;
+  unitId: string;
+  role: UserRole;
+}
+
+export interface RemoveUnitMemberInput {
+  userId: string;
+  unitId: string;
+}
+
+export interface PurgeUnitDataInput {
+  deleteClients: boolean;
+  deleteAttendants: boolean;
+  deleteVehicles: boolean;
 }

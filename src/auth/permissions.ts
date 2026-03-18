@@ -13,6 +13,18 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "assign_task",
     "create_client",
   ],
+  leader: [
+    "view_dashboard",
+    "view_vehicles",
+    "view_attendants",
+    "view_parking_map",
+    "view_financial",
+    "view_clients",
+    "create_vehicle",
+    "register_exit",
+    "assign_task",
+    "create_client",
+  ],
   attendant: [
     "view_dashboard",
     "view_vehicles",

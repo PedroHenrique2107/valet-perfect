@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getRoleDisplayName, useAuth } from "@/contexts/AuthContext";
 import { useVehiclesQuery } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -44,7 +45,7 @@ const mainNavItems: NavItem[] = [
 
 const bottomNavItems: NavItem[] = [
   { icon: Bell, label: "Notificacoes", href: "/notifications", badge: 5, comingSoon: true },
-  { icon: Settings, label: "Configuracoes", href: "/settings", comingSoon: true },
+  { icon: Settings, label: "Configuracoes", href: "/settings" },
 ];
 
 export function Sidebar() {
@@ -52,6 +53,7 @@ export function Sidebar() {
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { data: vehicles = [] } = useVehiclesQuery();
+  const settings = useAppSettings();
   const parkedVehiclesCount = vehicles.filter((vehicle) => vehicle.status === "parked").length;
 
   const resolvedMainNavItems = mainNavItems.map((item) =>
@@ -131,11 +133,11 @@ export function Sidebar() {
       {!collapsed && (
         <div className="border-b border-sidebar-border px-3 py-4">
           <button className="flex w-full items-center gap-3 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1 text-left">
-              <p className="text-sm font-medium">Shopping Center Norte</p>
-              <p className="text-xs text-muted-foreground">Sao Paulo, SP</p>
-            </div>
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <div className="flex-1 text-left">
+              <p className="text-sm font-medium">{settings.unitName}</p>
+              <p className="text-xs text-muted-foreground">{settings.unitLocation}</p>
+              </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>

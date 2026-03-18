@@ -191,12 +191,12 @@ export default function LoginPage() {
 
       <div className="relative grid w-full max-w-5xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="hidden rounded-[32px] border border-white/10 bg-white/5 p-10 text-white shadow-2xl shadow-sky-950/40 lg:block">
-          <p className="text-sm uppercase tracking-[0.35em] text-sky-200/70">Valet Perfect</p>
+          <p className="text-sm uppercase tracking-[0.35em] text-sky-200/70">Valet Tracker</p>
           <h1 className="mt-6 max-w-md font-serif text-5xl leading-tight">
             Operacao de valet com autenticacao real e dados centralizados.
           </h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-slate-300">
-            Entre com sua conta da unidade para acessar dashboard, clientes, patio e financeiro com isolamento por perfil e por unidade.
+            Acesse a plataforma utilizando sua conta para visualizar informações e funcionalidades de acordo com seu perfil e unidade.
           </p>
         </section>
 
@@ -207,7 +207,7 @@ export default function LoginPage() {
             </div>
             <CardTitle className="text-3xl font-semibold text-slate-950">Entrar</CardTitle>
             <CardDescription className="text-sm leading-6 text-slate-700">
-              Use seu e-mail e senha do Supabase Auth.
+              Use seu e-mail e senha cadastrado.
             </CardDescription>
             {!envReady ? (
               <div className="rounded-2xl border border-amber-300/80 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">

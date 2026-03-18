@@ -6,13 +6,18 @@ import {
   type CreateParkingSpotInput,
   type CreateAttendantInput,
   type CreateClientInput,
+  type CreateUnitInput,
+  type CreateUnitInvitationInput,
   type CreateVehicleInput,
   type AddClientVehicleInput,
   type ChargeClientInput,
   type MoveParkingSpotInput,
+  type PurgeUnitDataInput,
   type RegisterExitInput,
+  type RemoveUnitMemberInput,
   type UpdateClientInput,
   type UpdateParkingSpotConfigInput,
+  type UpdateUnitMemberRoleInput,
   type UpdateVehicleSpotInput,
 } from "@/services/valetApi";
 
@@ -28,6 +33,9 @@ const ALL_KEYS = [
   "dashboard-stats",
   "activities",
   "clients",
+  "units",
+  "unit-members",
+  "unit-invitations",
 ] as const;
 
 function useInvalidateCoreQueries() {
@@ -112,6 +120,30 @@ export function useClientsQuery() {
   return useQuery({
     queryKey: ["clients"],
     queryFn: valetApi.getClients,
+    staleTime: STALE_TIME,
+  });
+}
+
+export function useUnitsQuery() {
+  return useQuery({
+    queryKey: ["units"],
+    queryFn: valetApi.getUnits,
+    staleTime: STALE_TIME,
+  });
+}
+
+export function useUnitMembersQuery() {
+  return useQuery({
+    queryKey: ["unit-members"],
+    queryFn: valetApi.getUnitMembers,
+    staleTime: STALE_TIME,
+  });
+}
+
+export function useUnitInvitationsQuery() {
+  return useQuery({
+    queryKey: ["unit-invitations"],
+    queryFn: valetApi.getUnitInvitations,
     staleTime: STALE_TIME,
   });
 }
@@ -240,6 +272,46 @@ export function useMoveParkingSpotMutation() {
   const invalidate = useInvalidateCoreQueries();
   return useMutation({
     mutationFn: (input: MoveParkingSpotInput) => valetApi.moveParkingSpot(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCreateUnitMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: CreateUnitInput) => valetApi.createUnit(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCreateUnitInvitationMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: CreateUnitInvitationInput) => valetApi.createUnitInvitation(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateUnitMemberRoleMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: UpdateUnitMemberRoleInput) => valetApi.updateUnitMemberRole(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useRemoveUnitMemberMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: RemoveUnitMemberInput) => valetApi.removeUnitMember(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function usePurgeUnitDataMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: PurgeUnitDataInput) => valetApi.purgeUnitData(input),
     onSuccess: invalidate,
   });
 }

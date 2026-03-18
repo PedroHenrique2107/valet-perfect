@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCreateAttendantMutation } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { useToast } from "@/hooks/use-toast";
 
 const PHONE_REGEX = /^\(\d{2}\) \d{5}-\d{4}$/;
@@ -66,7 +67,9 @@ function formatPhoneInput(value: string): string {
 
 export function AttendantCreateDialog({ open, onOpenChange }: AttendantCreateDialogProps) {
   const createAttendant = useCreateAttendantMutation();
+  const settings = useAppSettings();
   const { toast } = useToast();
+  const defaultShift = settings.shiftRules[0];
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -74,9 +77,9 @@ export function AttendantCreateDialog({ open, onOpenChange }: AttendantCreateDia
       name: "",
       phone: "",
       parkingId: PARKING_OPTIONS[0].id,
-      workPeriodStart: "08:00",
-      workPeriodEnd: "17:00",
-      maxWorkHours: getWorkHours("08:00", "17:00"),
+      workPeriodStart: defaultShift?.startTime ?? "08:00",
+      workPeriodEnd: defaultShift?.endTime ?? "17:00",
+      maxWorkHours: defaultShift?.maxWorkHours ?? getWorkHours("08:00", "17:00"),
     },
   });
 
@@ -98,9 +101,9 @@ export function AttendantCreateDialog({ open, onOpenChange }: AttendantCreateDia
       name: "",
       phone: "",
       parkingId: PARKING_OPTIONS[0].id,
-      workPeriodStart: "08:00",
-      workPeriodEnd: "17:00",
-      maxWorkHours: getWorkHours("08:00", "17:00"),
+      workPeriodStart: defaultShift?.startTime ?? "08:00",
+      workPeriodEnd: defaultShift?.endTime ?? "17:00",
+      maxWorkHours: defaultShift?.maxWorkHours ?? getWorkHours("08:00", "17:00"),
     });
     onOpenChange(false);
   });
