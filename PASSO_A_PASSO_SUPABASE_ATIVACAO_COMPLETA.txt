@@ -1,0 +1,489 @@
+PASSO A PASSO COMPLETO PARA ATIVAR O PROJETO NO SUPABASE
+Data deste guia: 18/03/2026
+
+OBJETIVO
+Este arquivo explica, de forma simples, tudo o que voce precisa fazer no Supabase para a aplicacao funcionar normalmente com:
+- login
+- perfis
+- unidades
+- usuarios por unidade
+- convites por e-mail
+- criacao de usuarios no Supabase
+- regras de acesso
+- tabelas e funcoes do sistema
+
+IMPORTANTE ANTES DE COMECAR
+1. Este projeto ja tem os arquivos necessarios no repositorio.
+2. O frontend ja foi ajustado para usar:
+- public.profiles
+- public.user_unit_roles
+- public.units
+- public.unit_invitations
+- edge function create-unit-user
+3. O que falta e ativar isso no seu projeto Supabase.
+
+ARQUIVOS IMPORTANTES DO PROJETO
+Os arquivos que voce vai usar como base estao aqui:
+
+1. Schema inicial:
+supabase/migrations/20260317_initial_schema.sql
+
+2. Gestao de unidades:
+supabase/migrations/20260318_unit_management.sql
+
+3. Sincronizacao de perfil e auth:
+supabase/migrations/20260318_profile_policies_and_auth_sync.sql
+
+4. Edge Function para criar usuario:
+supabase/functions/create-unit-user/index.ts
+
+5. Tela de configuracoes:
+src/pages/SettingsPage.tsx
+
+6. Integracao frontend com Supabase:
+src/services/valetApi.ts
+
+7. Contexto de autenticacao:
+src/contexts/AuthContext.tsx
+
+==================================================
+ETAPA 1 - CONFERIR O .ENV DO PROJETO
+==================================================
+
+Arquivo:
+.env
+
+Voce precisa ter pelo menos:
+- VITE_SUPABASE_URL
+- VITE_SUPABASE_ANON_KEY
+
+No seu projeto ja existe esse arquivo preenchido.
+
+IMPORTANTE:
+- nunca usar SERVICE ROLE KEY no frontend
+- a SERVICE ROLE KEY deve ficar somente no Supabase Edge Function ou em ambiente seguro
+
+Se um dia trocar de projeto Supabase:
+1. Abra o dashboard do Supabase
+2. Va em Project Settings
+3. Va em API
+4. Copie:
+- Project URL
+- anon public key
+5. Atualize o .env
+
+==================================================
+ETAPA 2 - EXECUTAR AS MIGRATIONS NO SUPABASE
+==================================================
+
+Voce precisa executar 3 arquivos SQL no seu projeto Supabase.
+
+ORDEM CORRETA:
+1. 20260317_initial_schema.sql
+2. 20260318_unit_management.sql
+3. 20260318_profile_policies_and_auth_sync.sql
+
+COMO FAZER PELO DASHBOARD
+1. Abra o Supabase Dashboard
+2. Entre no seu projeto
+3. Va em SQL Editor
+4. Clique em New query
+5. Abra o primeiro arquivo SQL no projeto
+6. Copie todo o conteudo
+7. Cole no SQL Editor
+8. Clique em Run
+9. Repita para os outros dois arquivos, na ordem acima
+
+O QUE ISSO VAI CRIAR OU AJUSTAR
+- tabela public.profiles
+- tabela public.user_unit_roles
+- tabela public.clients
+- tabela public.client_vehicles
+- tabela public.parking_spots
+- tabela public.vehicle_stays
+- tabela public.transactions
+- tabela public.units
+- tabela public.unit_invitations
+- views usadas pelo dashboard
+- policies RLS
+- funcoes RPC
+- trigger para sincronizar auth.users com public.profiles
+
+OBSERVACAO IMPORTANTE
+Se alguma query acusar que algo ja existe:
+- leia o erro com calma
+- se for apenas porque a estrutura ja foi criada antes, normalmente nao e problema
+- se houver conflito real de coluna, trigger ou policy, me chame que eu te passo uma query de ajuste
+
+==================================================
+ETAPA 3 - VERIFICAR SE AS TABELAS EXISTEM
+==================================================
+
+Depois das migrations, va em:
+1. Table Editor
+2. Confira se existem estas tabelas:
+
+- profiles
+- user_unit_roles
+- clients
+- client_vehicles
+- parking_spots
+- vehicle_stays
+- transactions
+- units
+- unit_invitations
+
+Se faltar qualquer uma delas, a migration nao foi aplicada corretamente.
+
+==================================================
+ETAPA 4 - CONFIGURAR AUTH URLS NO SUPABASE
+==================================================
+
+Como agora existe fluxo de convite por e-mail e atualizacao de usuario, voce precisa conferir as URLs do Auth.
+
+No Supabase Dashboard:
+1. Authentication
+2. URL Configuration
+
+Voce deve preencher:
+
+1. Site URL
+Se estiver rodando localmente, use:
+http://localhost:8080
+
+Se o Vite estiver abrindo em outra porta, use a porta correta.
+Exemplo:
+http://localhost:5173
+
+2. Redirect URLs
+Adicione pelo menos:
+- http://localhost:8080
+- http://localhost:8080/login
+- http://localhost:5173
+- http://localhost:5173/login
+
+Se voce tiver dominio publicado, adicione tambem:
+- https://seudominio.com
+- https://seudominio.com/login
+
+POR QUE ISSO E IMPORTANTE
+Sem isso:
+- convite por e-mail pode abrir errado
+- redefinicao de senha pode falhar
+- confirmacao de e-mail pode redirecionar para lugar errado
+
+==================================================
+ETAPA 5 - PUBLICAR A EDGE FUNCTION create-unit-user
+==================================================
+
+Essa e a parte nova mais importante.
+
+A tela de Configuracoes agora tenta criar o usuario direto no Supabase usando a funcao:
+- create-unit-user
+
+Arquivo da funcao:
+supabase/functions/create-unit-user/index.ts
+
+O QUE ESTA FUNCAO FAZ
+- valida o usuario logado
+- verifica se ele pode gerenciar a unidade
+- cria convite/autenticacao no Supabase Auth
+- cria/atualiza profile
+- vincula o usuario a unidade
+- registra a criacao em unit_invitations
+
+OPCAO A - PUBLICAR PELA CLI DO SUPABASE
+Se voce usa Supabase CLI, rode no terminal na raiz do projeto:
+
+1. Login na CLI:
+supabase login
+
+2. Linkar o projeto:
+supabase link --project-ref wsafjczckucqromiykol
+
+3. Publicar a function:
+supabase functions deploy create-unit-user
+
+OPCAO B - SE VOCE NAO USA CLI
+Instale a Supabase CLI e faca a opcao A.
+
+OBSERVACAO
+Sem publicar essa function:
+- o botao "Criar usuario no Supabase" da tela de configuracoes nao vai funcionar
+
+==================================================
+ETAPA 6 - CONFIGURAR OS SECRETS DA EDGE FUNCTION
+==================================================
+
+A function usa:
+- SUPABASE_URL
+- SUPABASE_SERVICE_ROLE_KEY
+
+Em muitos casos, o Supabase ja fornece variaveis internas.
+Mas para garantir, faca esta conferencia.
+
+No terminal com Supabase CLI:
+
+1. Defina a service role key:
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=SUA_SERVICE_ROLE_KEY
+
+2. Se necessario, defina tambem:
+supabase secrets set SUPABASE_URL=https://wsafjczckucqromiykol.supabase.co
+
+ONDE PEGAR A SERVICE ROLE KEY
+1. Supabase Dashboard
+2. Project Settings
+3. API
+4. Copie a chave:
+- service_role
+
+MUITO IMPORTANTE
+- nunca coloque SERVICE ROLE KEY no .env do frontend
+- essa chave da acesso total ao banco
+
+==================================================
+ETAPA 7 - CRIAR A PRIMEIRA UNIDADE
+==================================================
+
+Agora existe tabela de unidades.
+
+Voce pode criar a primeira unidade de 2 formas:
+
+FORMA 1 - Pela tela do sistema
+1. Entre no sistema com um usuario admin
+2. Va em Configuracoes
+3. Use o card "Criar unidade"
+
+FORMA 2 - Pelo SQL Editor
+Use algo assim:
+
+insert into public.units (name, location, created_by)
+values ('Valet Perfect', 'Sao Paulo, SP', 'UUID_DO_USUARIO_ADMIN');
+
+MAS O MELHOR E:
+usar a propria tela ou a funcao RPC create_unit, porque ela ja tenta vincular o admin na unidade.
+
+==================================================
+ETAPA 8 - CONFERIR O USUARIO ADMIN
+==================================================
+
+Voce precisa garantir que seu usuario principal tenha:
+- registro em auth.users
+- registro em public.profiles
+- registro em public.user_unit_roles
+
+COMO VERIFICAR
+
+1. Authentication > Users
+Confirme que o usuario existe
+
+2. Table Editor > profiles
+Confirme que existe linha com:
+- id igual ao UUID do auth.users
+- full_name preenchido
+- email preenchido
+
+3. Table Editor > user_unit_roles
+Confirme que existe linha com:
+- user_id = UUID do usuario
+- unit_id = UUID da unidade
+- role = admin
+
+SEM ISSO
+- login pode funcionar parcialmente
+- o nome pode nao aparecer direito
+- o usuario pode cair como "Sem perfil"
+- as telas protegidas podem falhar
+
+==================================================
+ETAPA 9 - TESTAR A SINCRONIZACAO DE PERFIL
+==================================================
+
+Foi adicionada uma migration com:
+- policies para inserir/editar profiles
+- trigger que sincroniza auth.users com public.profiles
+
+Arquivo:
+supabase/migrations/20260318_profile_policies_and_auth_sync.sql
+
+O QUE TESTAR
+1. Entre no sistema
+2. Va em Configuracoes
+3. Edite seu nome, e-mail ou telefone em "Meu perfil"
+4. Clique em salvar
+
+Depois confira no Supabase:
+1. Table Editor > profiles
+2. Veja se:
+- full_name foi atualizado
+- email foi atualizado
+- phone foi atualizado
+
+OBSERVACAO
+Se mudar o e-mail, o Supabase pode exigir confirmacao dependendo da configuracao do Auth.
+Isso e comportamento normal.
+
+==================================================
+ETAPA 10 - TESTAR A CRIACAO DE USUARIO PELO SISTEMA
+==================================================
+
+Depois da function publicada:
+1. Entre no sistema com admin ou lider de posto
+2. Va em Configuracoes
+3. Abra o card "Usuarios por unidade"
+4. Preencha:
+- unidade
+- nome
+- e-mail
+- telefone
+- perfil
+- horario
+- horas maximas
+5. Deixe ligado "Enviar convite por e-mail" se quiser o disparo
+6. Clique em "Criar usuario no Supabase"
+
+O QUE DEVE ACONTECER
+1. O usuario deve aparecer em Authentication > Users
+2. Deve existir em public.profiles
+3. Deve existir em public.user_unit_roles
+4. Deve existir registro em public.unit_invitations
+
+SE DER ERRO
+Confira nesta ordem:
+1. migrations aplicadas
+2. function publicada
+3. secrets configurados
+4. usuario logado com role admin ou leader na unidade
+5. redirect URLs configuradas
+
+==================================================
+ETAPA 11 - TESTAR O CONVITE POR E-MAIL
+==================================================
+
+Com a opcao "Enviar convite por e-mail" ligada:
+1. Crie um usuario novo com e-mail que ainda nao existe
+2. Verifique se o e-mail foi recebido
+3. Clique no link do convite
+4. Finalize o acesso
+5. Entre no sistema
+
+Se o e-mail nao chegar:
+1. Veja se a function foi publicada
+2. Veja se a conta foi criada em Authentication > Users
+3. Confira se seu projeto Supabase esta com e-mail auth habilitado
+4. Confira se o template de invite esta ativo no Auth
+
+No Dashboard:
+Authentication
+Templates
+
+Confira principalmente o template de convite.
+
+==================================================
+ETAPA 12 - CONFERIR RLS E ACESSO AOS DADOS
+==================================================
+
+O projeto usa RLS.
+Ou seja: o usuario so enxerga dados da unidade dele.
+
+Se alguma tela aparecer vazia mesmo com dados no banco:
+1. Veja o unit_id do dado
+2. Veja o unit_id em user_unit_roles do usuario
+3. Eles precisam bater
+
+Tabelas sensiveis para isso:
+- clients
+- client_vehicles
+- parking_spots
+- vehicle_stays
+- transactions
+- unit_invitations
+
+Se o unit_id estiver diferente:
+- o dado existe
+- mas o usuario nao consegue ver
+
+==================================================
+ETAPA 13 - TESTE FINAL DO SISTEMA
+==================================================
+
+Depois de terminar tudo, faca este teste:
+
+1. Rodar o projeto local:
+npm run dev
+
+2. Fazer login com admin
+
+3. Abrir Configuracoes e validar:
+- Base da operacao
+- Mensalistas e credenciados
+- Convenios
+- Tabela avulsa por faixa
+- Meu perfil
+- Usuarios por unidade
+
+4. Criar um usuario novo pelo sistema
+
+5. Verificar no Supabase:
+- Authentication > Users
+- profiles
+- user_unit_roles
+- unit_invitations
+
+6. Atualizar seu perfil e conferir se refletiu no banco
+
+7. Validar se a sidebar mostra:
+- nome grande
+- email
+- perfil
+
+8. Rodar build:
+npm run build
+
+Se isso tudo passar, o sistema esta ativado corretamente.
+
+==================================================
+ETAPA 14 - RESUMO DO QUE E OBRIGATORIO
+==================================================
+
+PARA APLICACAO FUNCIONAR NORMALMENTE, OBRIGATORIO:
+- .env com URL e ANON KEY corretas
+- migrations executadas
+- Auth URLs configuradas
+- edge function create-unit-user publicada
+- secret SUPABASE_SERVICE_ROLE_KEY configurado
+- usuario admin existente
+- profiles correto
+- user_unit_roles correto
+- unidade criada
+
+SE FALTAR APENAS A EDGE FUNCTION
+O restante do sistema pode funcionar, mas:
+- o botao de criar usuario no Supabase nao vai funcionar
+
+SE FALTAR A MIGRATION DE PROFILE SYNC
+O login pode funcionar, mas:
+- perfil pode nao sincronizar direito
+- nome pode aparecer errado
+- profiles pode nao atualizar automaticamente
+
+==================================================
+ETAPA 15 - ORDEM MAIS RECOMENDADA PARA VOCE FAZER AGORA
+==================================================
+
+Siga exatamente esta ordem:
+
+1. Conferir .env
+2. Executar:
+- 20260317_initial_schema.sql
+- 20260318_unit_management.sql
+- 20260318_profile_policies_and_auth_sync.sql
+3. Configurar Site URL e Redirect URLs no Auth
+4. Publicar a function create-unit-user
+5. Configurar o secret SUPABASE_SERVICE_ROLE_KEY
+6. Garantir que seu usuario principal esta como admin em user_unit_roles
+7. Testar "Meu perfil"
+8. Testar "Criar usuario no Supabase"
+9. Testar convite por e-mail
+
+FIM

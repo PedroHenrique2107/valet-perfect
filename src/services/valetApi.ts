@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Activity, Attendant, DashboardStats, OccupancyData, ParkingSpot, RevenueData } from "@/types/valet";
-import type { PurgeResult, Unit, UnitInvitation, UnitMember } from "@/types/management";
+import type { ManagedUserCreationResult, PurgeResult, Unit, UnitInvitation, UnitMember } from "@/types/management";
 import { addClientVehicle, chargeClient, createClient, listClients, updateClient } from "@/services/clients.service";
 import {
   EMPTY_DASHBOARD_STATS,
@@ -26,6 +26,7 @@ import type {
   ChargeClientInput,
   CreateAttendantInput,
   CreateClientInput,
+  CreateManagedUserInput,
   CreateParkingFloorInput,
   CreateParkingSpotInput,
   CreateVehicleInput,
@@ -36,6 +37,7 @@ import type {
   RegisterExitInput,
   RemoveUnitMemberInput,
   UpdateClientInput,
+  UpdateMyProfileInput,
   UpdateParkingSpotConfigInput,
   UpdateUnitMemberRoleInput,
   UpdateVehicleSpotInput,
@@ -47,6 +49,7 @@ export type {
   ChargeClientInput,
   CreateAttendantInput,
   CreateClientInput,
+  CreateManagedUserInput,
   CreateParkingFloorInput,
   CreateParkingSpotInput,
   CreateVehicleInput,
@@ -57,6 +60,7 @@ export type {
   RegisterExitInput,
   RemoveUnitMemberInput,
   UpdateClientInput,
+  UpdateMyProfileInput,
   UpdateParkingSpotConfigInput,
   UpdateUnitMemberRoleInput,
   UpdateVehicleSpotInput,
@@ -390,6 +394,86 @@ async function createUnitInvitation(input: CreateUnitInvitationInput): Promise<U
   return toUnitInvitation(data);
 }
 
+async function createManagedUser(input: CreateManagedUserInput): Promise<ManagedUserCreationResult> {
+  ensureSupabaseConfigured();
+  const { data, error } = await supabase.functions.invoke("create-unit-user", {
+    body: {
+      name: input.name,
+      email: input.email,
+      phone: input.phone ?? null,
+      role: input.role,
+      unitId: input.unitId ?? null,
+      workPeriodStart: input.workPeriodStart,
+      workPeriodEnd: input.workPeriodEnd,
+      maxWorkHours: input.maxWorkHours,
+      sendInviteEmail: input.sendInviteEmail ?? true,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data || typeof data !== "object") {
+    throw new Error("Resposta invalida ao criar o usuario.");
+  }
+
+  return toManagedUserCreationResult(data as Record<string, unknown>);
+}
+
+async function updateMyProfile(input: UpdateMyProfileInput) {
+  ensureSupabaseConfigured();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error("Nenhum usuario autenticado.");
+  }
+
+  const trimmedName = input.name.trim();
+  const trimmedEmail = input.email.trim().toLowerCase();
+  const trimmedPhone = input.phone?.trim() || null;
+
+  const { error: profileError } = await supabase.from("profiles").upsert({
+    id: user.id,
+    full_name: trimmedName,
+    email: trimmedEmail,
+    phone: trimmedPhone,
+  });
+
+  if (profileError) {
+    throw new Error(profileError.message);
+  }
+
+  const metadataNeedsUpdate =
+    (user.user_metadata?.full_name ?? "") !== trimmedName || (user.user_metadata?.phone ?? "") !== (trimmedPhone ?? "");
+  const emailNeedsUpdate = user.email?.toLowerCase() !== trimmedEmail;
+
+  if (metadataNeedsUpdate || emailNeedsUpdate) {
+    const { error: authError } = await supabase.auth.updateUser({
+      email: emailNeedsUpdate ? trimmedEmail : undefined,
+      data: {
+        ...user.user_metadata,
+        full_name: trimmedName,
+        name: trimmedName,
+        phone: trimmedPhone,
+      },
+    });
+
+    if (authError) {
+      throw new Error(authError.message);
+    }
+  }
+
+  return {
+    id: user.id,
+    name: trimmedName,
+    email: trimmedEmail,
+    phone: trimmedPhone,
+  };
+}
+
 async function updateUnitMemberRole(input: UpdateUnitMemberRoleInput) {
   ensureSupabaseConfigured();
   const { data, error } = await supabase.rpc("update_unit_member_role", {
@@ -469,7 +553,19 @@ export const valetApi = {
   getUnitInvitations: listUnitInvitations,
   createUnit: (input: CreateUnitInput) => createUnit(input),
   createUnitInvitation: (input: CreateUnitInvitationInput) => createUnitInvitation(input),
+  createManagedUser: (input: CreateManagedUserInput) => createManagedUser(input),
   updateUnitMemberRole: (input: UpdateUnitMemberRoleInput) => updateUnitMemberRole(input),
   removeUnitMember: (input: RemoveUnitMemberInput) => removeUnitMember(input),
   purgeUnitData: (input: PurgeUnitDataInput) => purgeUnitData(input),
+  updateMyProfile: (input: UpdateMyProfileInput) => updateMyProfile(input),
 };
+function toManagedUserCreationResult(row: Record<string, unknown>): ManagedUserCreationResult {
+  return {
+    userId: String(row.user_id ?? row.userId ?? ""),
+    invitationId: String(row.invitation_id ?? row.invitationId ?? ""),
+    unitId: String(row.unit_id ?? row.unitId ?? ""),
+    status: String(row.status ?? "linked") as ManagedUserCreationResult["status"],
+    email: String(row.email ?? ""),
+    name: String(row.name ?? ""),
+  };
+}

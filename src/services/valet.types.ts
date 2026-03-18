@@ -148,6 +148,16 @@ export interface CreateUnitInvitationInput {
   maxWorkHours: number;
 }
 
+export interface CreateManagedUserInput extends CreateUnitInvitationInput {
+  sendInviteEmail?: boolean;
+}
+
+export interface UpdateMyProfileInput {
+  name: string;
+  email: string;
+  phone?: string;
+}
+
 export interface UpdateUnitMemberRoleInput {
   userId: string;
   unitId: string;

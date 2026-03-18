@@ -16,6 +16,8 @@ import {
   type RegisterExitInput,
   type RemoveUnitMemberInput,
   type UpdateClientInput,
+  type CreateManagedUserInput,
+  type UpdateMyProfileInput,
   type UpdateParkingSpotConfigInput,
   type UpdateUnitMemberRoleInput,
   type UpdateVehicleSpotInput,
@@ -292,6 +294,14 @@ export function useCreateUnitInvitationMutation() {
   });
 }
 
+export function useCreateManagedUserMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: CreateManagedUserInput) => valetApi.createManagedUser(input),
+    onSuccess: invalidate,
+  });
+}
+
 export function useUpdateUnitMemberRoleMutation() {
   const invalidate = useInvalidateCoreQueries();
   return useMutation({
@@ -313,5 +323,11 @@ export function usePurgeUnitDataMutation() {
   return useMutation({
     mutationFn: (input: PurgeUnitDataInput) => valetApi.purgeUnitData(input),
     onSuccess: invalidate,
+  });
+}
+
+export function useUpdateMyProfileMutation() {
+  return useMutation({
+    mutationFn: (input: UpdateMyProfileInput) => valetApi.updateMyProfile(input),
   });
 }

@@ -24,6 +24,9 @@ const ROLE_NAMES: Record<UserRole, string> = {
 
 interface ProfileRow {
   full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  avatar_url?: string | null;
 }
 
 interface UserUnitRoleRow {
@@ -50,6 +53,8 @@ function buildSessionUser(authUser: User, overrides?: Partial<SessionUser>): Ses
     name: fallbackName,
     role: fallbackRole,
     unitId: null,
+    phone: null,
+    avatarUrl: null,
     ...overrides,
   };
 }
@@ -62,11 +67,14 @@ async function loadSessionUser(session: Session | null): Promise<SessionUser | n
 
   const fallbackUser = buildSessionUser(authUser);
   let profileName = fallbackUser.name;
+  let profileEmail = fallbackUser.email;
+  let profilePhone: string | null = fallbackUser.phone ?? null;
+  let profileAvatarUrl: string | null = fallbackUser.avatarUrl ?? null;
   let roleFromDb: UserRole | null = fallbackUser.role;
   let unitId: string | null = null;
 
   const [profileResult, roleResult] = await Promise.allSettled([
-    supabase.from("profiles").select("full_name").eq("id", authUser.id).maybeSingle<ProfileRow>(),
+    supabase.from("profiles").select("full_name, email, phone, avatar_url").eq("id", authUser.id).maybeSingle<ProfileRow>(),
     supabase
       .from("user_unit_roles")
       .select("role, unit_id")
@@ -79,6 +87,12 @@ async function loadSessionUser(session: Session | null): Promise<SessionUser | n
     profileName = profileResult.value.data.full_name;
   }
 
+  if (profileResult.status === "fulfilled" && profileResult.value.data) {
+    profileEmail = profileResult.value.data.email || fallbackUser.email;
+    profilePhone = profileResult.value.data.phone ?? null;
+    profileAvatarUrl = profileResult.value.data.avatar_url ?? null;
+  }
+
   if (roleResult.status === "fulfilled") {
     const roleRow = roleResult.value.data;
     if (isKnownRole(roleRow?.role)) {
@@ -89,6 +103,9 @@ async function loadSessionUser(session: Session | null): Promise<SessionUser | n
 
   return buildSessionUser(authUser, {
     name: profileName || fallbackUser.email || "Usuario",
+    email: profileEmail || fallbackUser.email,
+    phone: profilePhone,
+    avatarUrl: profileAvatarUrl,
     role: roleFromDb,
     unitId,
   });

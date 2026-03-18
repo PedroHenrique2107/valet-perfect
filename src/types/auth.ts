@@ -6,6 +6,8 @@ export interface SessionUser {
   name: string;
   role: UserRole | null;
   unitId?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
 }
 
 export type Permission =

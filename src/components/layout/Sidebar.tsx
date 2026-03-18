@@ -163,12 +163,12 @@ export function Sidebar() {
           )}
         >
           <Avatar className="h-9 w-9 flex-shrink-0">
-            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.name ?? "User")}`} />
+            <AvatarImage src={user?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.name ?? "User")}`} />
             <AvatarFallback>{(user?.name ?? "U").slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="min-w-0 flex-1 space-y-1">
-              <p className="truncate text-sm font-medium">{user?.name ?? "Usuário"}</p>
+              <p className="truncate text-base font-semibold leading-tight">{user?.name ?? "Usuario"}</p>
               <p className="truncate text-xs text-muted-foreground">{user?.email ?? "Sem e-mail"}</p>
               <p className="truncate text-xs text-muted-foreground">{getRoleDisplayName(user?.role)}</p>
             </div>

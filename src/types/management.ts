@@ -33,6 +33,15 @@ export interface UnitInvitation {
   createdAt: Date;
 }
 
+export interface ManagedUserCreationResult {
+  userId: string;
+  invitationId: string;
+  unitId: string;
+  status: "linked" | "pending";
+  email: string;
+  name: string;
+}
+
 export interface PurgeResult {
   unitId: string;
   deletedTransactions: number;

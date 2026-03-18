@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import {
   Select,
   SelectContent,
@@ -257,12 +258,7 @@ export function ParkingFloorManagerDialog({
                   </div>
                   <div className="space-y-2">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Quantidade de vagas</p>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={totalSpots}
-                      onChange={(event) => setTotalSpots(Number(event.target.value))}
-                    />
+                    <NumberInput value={totalSpots} onValueChange={setTotalSpots} placeholder="Quantidade total" />
                   </div>
                 </div>
 
@@ -271,25 +267,13 @@ export function ParkingFloorManagerDialog({
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       Quantidade de secoes
                     </p>
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder={`Opcional. Ex.: ${Math.max(existingRegularSections.length, 1)}`}
-                      value={sectionCountInput}
-                      onChange={(event) => setSectionCountInput(event.target.value)}
-                    />
+                    <NumberInput placeholder={`Opcional. Ex.: ${Math.max(existingRegularSections.length, 1)}`} value={sectionCountInput ? Number(sectionCountInput) : null} onValueChange={(value) => setSectionCountInput(String(value))} />
                   </div>
                   <div className="space-y-2">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       Vagas por secao
                     </p>
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="Opcional"
-                      value={spotsPerSectionInput}
-                      onChange={(event) => setSpotsPerSectionInput(event.target.value)}
-                    />
+                    <NumberInput placeholder="Opcional" value={spotsPerSectionInput ? Number(spotsPerSectionInput) : null} onValueChange={(value) => setSpotsPerSectionInput(String(value))} />
                   </div>
                 </div>
 
