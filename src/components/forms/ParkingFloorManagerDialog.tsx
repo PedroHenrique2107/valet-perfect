@@ -203,7 +203,7 @@ export function ParkingFloorManagerDialog({
       });
       toast({
         title: "Piso criado",
-        description: `Piso ${nextFloor} solicitado com ${totalSpots} vaga(s) planejada(s).`,
+        description: `Piso ${nextFloor} criado com ${totalSpots} vaga(s).`,
       });
       onOpenChange(false);
     } catch (error) {

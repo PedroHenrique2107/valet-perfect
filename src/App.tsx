@@ -14,6 +14,8 @@ const VehiclesPage = lazy(() => import("./pages/VehiclesPage"));
 const AttendantsPage = lazy(() => import("./pages/AttendantsPage"));
 const ParkingMapPage = lazy(() => import("./pages/ParkingMapPage"));
 const FinancialPage = lazy(() => import("./pages/FinancialPage"));
+const CashPage = lazy(() => import("./pages/CashPage"));
+const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const ClientsPage = lazy(() => import("./pages/ClientsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
@@ -78,10 +80,26 @@ const App = () => (
                 }
               />
               <Route
+                path="/cash"
+                element={
+                  <ProtectedRoute allowedRoles={["admin", "leader", "attendant", "cashier"]}>
+                    <CashPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/clients"
                 element={
                   <ProtectedRoute allowedRoles={["admin", "leader", "attendant", "cashier"]}>
                     <ClientsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reports"
+                element={
+                  <ProtectedRoute allowedRoles={["admin", "leader", "cashier"]}>
+                    <ReportsPage />
                   </ProtectedRoute>
                 }
               />

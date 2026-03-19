@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
+  Wallet,
   LogOut,
   MapPin,
   Receipt,
@@ -38,8 +39,9 @@ const mainNavItems: NavItem[] = [
   { icon: Users, label: "Manobristas", href: "/attendants" },
   { icon: MapPin, label: "Mapa do Patio", href: "/parking-map" },
   { icon: Receipt, label: "Financeiro", href: "/financial" },
+  { icon: Wallet, label: "Caixa", href: "/cash" },
   { icon: UserCircle, label: "Clientes", href: "/clients" },
-  { icon: BarChart3, label: "Relatorios", href: "/reports", comingSoon: true },
+  { icon: BarChart3, label: "Relatorios", href: "/reports" },
   { icon: Calendar, label: "Eventos", href: "/events", comingSoon: true },
 ];
 

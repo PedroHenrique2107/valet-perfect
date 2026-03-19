@@ -4,6 +4,7 @@ import {
   type CreateParkingFloorInput,
   type AssignTaskInput,
   type CreateParkingSpotInput,
+  type CloseCashSessionInput,
   type CreateAttendantInput,
   type CreateClientInput,
   type CreateUnitInput,
@@ -12,6 +13,7 @@ import {
   type AddClientVehicleInput,
   type ChargeClientInput,
   type MoveParkingSpotInput,
+  type OpenCashSessionInput,
   type PurgeUnitDataInput,
   type RegisterExitInput,
   type RemoveUnitMemberInput,
@@ -38,6 +40,8 @@ const ALL_KEYS = [
   "units",
   "unit-members",
   "unit-invitations",
+  "cash-sessions",
+  "current-cash-session",
 ] as const;
 
 function useInvalidateCoreQueries() {
@@ -147,6 +151,22 @@ export function useUnitInvitationsQuery() {
     queryKey: ["unit-invitations"],
     queryFn: valetApi.getUnitInvitations,
     staleTime: STALE_TIME,
+  });
+}
+
+export function useCashSessionsQuery() {
+  return useQuery({
+    queryKey: ["cash-sessions"],
+    queryFn: valetApi.getCashSessions,
+    staleTime: STALE_TIME,
+  });
+}
+
+export function useCurrentCashSessionQuery() {
+  return useQuery({
+    queryKey: ["current-cash-session"],
+    queryFn: valetApi.getCurrentCashSession,
+    staleTime: 15_000,
   });
 }
 
@@ -329,5 +349,21 @@ export function usePurgeUnitDataMutation() {
 export function useUpdateMyProfileMutation() {
   return useMutation({
     mutationFn: (input: UpdateMyProfileInput) => valetApi.updateMyProfile(input),
+  });
+}
+
+export function useOpenCashSessionMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: OpenCashSessionInput) => valetApi.openCashSession(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCloseCashSessionMutation() {
+  const invalidate = useInvalidateCoreQueries();
+  return useMutation({
+    mutationFn: (input: CloseCashSessionInput) => valetApi.closeCashSession(input),
+    onSuccess: invalidate,
   });
 }

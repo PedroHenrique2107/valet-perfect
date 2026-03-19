@@ -10,6 +10,7 @@ export type AttendantStatus = "online" | "offline" | "lunch" | "dinner" | "commu
 export type PaymentMethod = 'pix' | 'credit' | 'debit' | 'cash' | 'monthly';
 
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+export type CashSessionStatus = "open" | "closed";
 
 export interface Vehicle {
   id: string;
@@ -42,6 +43,8 @@ export interface Vehicle {
   billingStatusAtEntry?: BillingStatus;
   vipRequired?: boolean;
   exemptFromCharge?: boolean;
+  entryCashSessionId?: string;
+  exitCashSessionId?: string;
 }
 
 export interface SpotHistoryEntry {
@@ -128,6 +131,61 @@ export interface Transaction {
   completedAt?: Date;
   receiptNumber: string;
   duration: number; // in minutes
+  cashSessionId?: string;
+}
+
+export interface CashSessionReportEntry {
+  stayId: string;
+  plate: string;
+  clientName: string;
+  driverName?: string;
+  entryTime?: Date;
+  exitTime?: Date;
+  spotId?: string;
+}
+
+export interface CashSessionReportTransaction {
+  transactionId: string;
+  receiptNumber: string;
+  paymentMethod: PaymentMethod;
+  status: PaymentStatus;
+  amount: number;
+  createdAt?: Date;
+  completedAt?: Date;
+}
+
+export interface CashSessionPaymentBreakdown {
+  paymentMethod: PaymentMethod;
+  amount: number;
+  count: number;
+}
+
+export interface CashSessionReport {
+  entries: CashSessionReportEntry[];
+  exits: CashSessionReportEntry[];
+  transactions: CashSessionReportTransaction[];
+  paymentBreakdown: CashSessionPaymentBreakdown[];
+}
+
+export interface CashSession {
+  id: string;
+  unitId: string;
+  attendantId: string;
+  attendantName: string;
+  status: CashSessionStatus;
+  openingAmount: number;
+  closingAmount?: number;
+  expectedAmount?: number;
+  differenceAmount?: number;
+  totalEntries: number;
+  totalExits: number;
+  totalRevenue: number;
+  totalTransactions: number;
+  openingNotes?: string;
+  closingNotes?: string;
+  openedAt: Date;
+  closedAt?: Date;
+  report?: CashSessionReport;
 }
 
 export interface DashboardStats {

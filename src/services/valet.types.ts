@@ -174,3 +174,13 @@ export interface PurgeUnitDataInput {
   deleteAttendants: boolean;
   deleteVehicles: boolean;
 }
+
+export interface OpenCashSessionInput {
+  openingAmount: number;
+  openingNotes?: string;
+}
+
+export interface CloseCashSessionInput {
+  closingAmount: number;
+  closingNotes?: string;
+}

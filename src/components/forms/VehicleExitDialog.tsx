@@ -42,6 +42,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
   const registerExit = useRegisterVehicleExitMutation();
   const settings = useAppSettings();
   const [now, setNow] = useState(Date.now());
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const activeVehicles = vehicles.filter((vehicle) => vehicle.status !== "delivered");
   const isLockedVehicle = Boolean(initialVehicleId);
@@ -58,6 +59,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
   useEffect(() => {
     if (!open) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    setSubmitError(null);
     return () => window.clearInterval(timer);
   }, [open]);
 
@@ -81,13 +83,23 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
   }, [durationMinutes, form, recurringCurrent, recurringOverdue, selectedVehicle]);
 
   const onSubmit = form.handleSubmit(async (values) => {
-    await registerExit.mutateAsync({
-      vehicleId: values.vehicleId,
-      paymentMethod: recurringCurrent ? "monthly" : values.paymentMethod,
-      amount: pricing.net,
-    });
-    form.reset({ vehicleId: initialVehicleId ?? "", paymentMethod: "pix", agreementId: "none" });
-    onOpenChange(false);
+    setSubmitError(null);
+    try {
+      await registerExit.mutateAsync({
+        vehicleId: values.vehicleId,
+        paymentMethod: recurringCurrent ? "monthly" : values.paymentMethod,
+        amount: pricing.net,
+      });
+      form.reset({ vehicleId: initialVehicleId ?? "", paymentMethod: "pix", agreementId: "none" });
+      onOpenChange(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Nao foi possivel registrar a saida.";
+      if (message.toLowerCase().includes("caixa aberto")) {
+        setSubmitError("O caixa precisa estar aberto para registrar saidas.");
+        return;
+      }
+      setSubmitError(message);
+    }
   });
 
   return (
@@ -192,6 +204,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
           {Object.values(form.formState.errors).length > 0 && (
             <p className="text-sm text-destructive">Confira os dados para registrar a saida.</p>
           )}
+          {submitError && <p className="text-sm text-destructive">{submitError}</p>}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

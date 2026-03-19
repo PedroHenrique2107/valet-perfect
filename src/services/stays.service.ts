@@ -72,6 +72,7 @@ export async function registerVehicleExit(input: RegisterExitInput): Promise<Veh
   const { data, error } = await supabase.rpc("register_vehicle_exit", {
     p_stay_id: input.vehicleId,
     p_payment_method: input.paymentMethod,
+    p_amount: input.amount,
   });
 
   if (error) {

@@ -325,6 +325,10 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
       onOpenChange(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Nao foi possivel registrar o veiculo.";
+      if (message.toLowerCase().includes("caixa aberto")) {
+        setSubmitError("O caixa precisa estar aberto para registrar novas entradas.");
+        return;
+      }
       if (message.toLowerCase().includes("ja existe um veiculo ativo com esta placa")) {
         setSubmitError("Esta placa ja esta no sistema.");
         return;

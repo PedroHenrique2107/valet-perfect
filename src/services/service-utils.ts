@@ -1,6 +1,11 @@
 import type {
   Activity,
   Attendant,
+  CashSession,
+  CashSessionPaymentBreakdown,
+  CashSessionReport,
+  CashSessionReportEntry,
+  CashSessionReportTransaction,
   BillingStatus,
   Client,
   ClientCategory,
@@ -81,6 +86,8 @@ export function toVehicle(row: Record<string, unknown>): Vehicle {
     billingStatusAtEntry: row.billing_status_at_entry as BillingStatus | undefined,
     vipRequired: typeof row.vip_required === "boolean" ? row.vip_required : undefined,
     exemptFromCharge: typeof row.exempt_from_charge === "boolean" ? row.exempt_from_charge : undefined,
+    entryCashSessionId: typeof row.entry_cash_session_id === "string" ? row.entry_cash_session_id : undefined,
+    exitCashSessionId: typeof row.exit_cash_session_id === "string" ? row.exit_cash_session_id : undefined,
   };
 }
 
@@ -136,6 +143,94 @@ export function toTransaction(row: Record<string, unknown>): Transaction {
     completedAt: row.completed_at ? parseDate(row.completed_at as string) : undefined,
     receiptNumber: String(row.receipt_number ?? ""),
     duration: Number(row.duration_minutes ?? row.duration ?? 0),
+    cashSessionId: typeof row.cash_session_id === "string" ? row.cash_session_id : undefined,
+  };
+}
+
+function toCashSessionReportEntry(row: Record<string, unknown>, type: "entry" | "exit"): CashSessionReportEntry {
+  return {
+    stayId: String(row.stayId ?? row.stay_id ?? ""),
+    plate: String(row.plate ?? ""),
+    clientName: String(row.clientName ?? row.client_name ?? ""),
+    driverName: typeof row.driverName === "string" ? row.driverName : typeof row.driver_name === "string" ? row.driver_name : undefined,
+    entryTime:
+      type === "entry" && (row.entryTime ?? row.entry_time)
+        ? parseDate((row.entryTime ?? row.entry_time) as string)
+        : undefined,
+    exitTime:
+      type === "exit" && (row.exitTime ?? row.exit_time)
+        ? parseDate((row.exitTime ?? row.exit_time) as string)
+        : undefined,
+    spotId: typeof row.spotId === "string" ? row.spotId : typeof row.spot_id === "string" ? row.spot_id : undefined,
+  };
+}
+
+function toCashSessionReportTransaction(row: Record<string, unknown>): CashSessionReportTransaction {
+  return {
+    transactionId: String(row.transactionId ?? row.transaction_id ?? ""),
+    receiptNumber: String(row.receiptNumber ?? row.receipt_number ?? ""),
+    paymentMethod: (row.paymentMethod ?? row.payment_method ?? "pix") as CashSessionReportTransaction["paymentMethod"],
+    status: (row.status ?? "completed") as CashSessionReportTransaction["status"],
+    amount: Number(row.amount ?? 0),
+    createdAt: row.createdAt || row.created_at ? parseDate((row.createdAt ?? row.created_at) as string) : undefined,
+    completedAt: row.completedAt || row.completed_at ? parseDate((row.completedAt ?? row.completed_at) as string) : undefined,
+  };
+}
+
+function toCashSessionPaymentBreakdown(row: Record<string, unknown>): CashSessionPaymentBreakdown {
+  return {
+    paymentMethod: (row.paymentMethod ?? row.payment_method ?? "pix") as CashSessionPaymentBreakdown["paymentMethod"],
+    amount: Number(row.amount ?? 0),
+    count: Number(row.count ?? 0),
+  };
+}
+
+function toCashSessionReport(row: Record<string, unknown> | null | undefined): CashSessionReport | undefined {
+  if (!row || typeof row !== "object") {
+    return undefined;
+  }
+
+  const entries = Array.isArray(row.entries)
+    ? row.entries.map((item) => toCashSessionReportEntry(item as Record<string, unknown>, "entry"))
+    : [];
+  const exits = Array.isArray(row.exits)
+    ? row.exits.map((item) => toCashSessionReportEntry(item as Record<string, unknown>, "exit"))
+    : [];
+  const transactions = Array.isArray(row.transactions)
+    ? row.transactions.map((item) => toCashSessionReportTransaction(item as Record<string, unknown>))
+    : [];
+  const paymentBreakdown = Array.isArray(row.paymentBreakdown)
+    ? row.paymentBreakdown.map((item) => toCashSessionPaymentBreakdown(item as Record<string, unknown>))
+    : [];
+
+  return {
+    entries,
+    exits,
+    transactions,
+    paymentBreakdown,
+  };
+}
+
+export function toCashSession(row: Record<string, unknown>): CashSession {
+  return {
+    id: String(row.id ?? ""),
+    unitId: String(row.unit_id ?? ""),
+    attendantId: String(row.attendant_id ?? ""),
+    attendantName: String(row.attendant_name ?? "Usuario"),
+    status: (row.status ?? "open") as CashSession["status"],
+    openingAmount: Number(row.opening_amount ?? 0),
+    closingAmount: row.closing_amount == null ? undefined : Number(row.closing_amount),
+    expectedAmount: row.expected_amount == null ? undefined : Number(row.expected_amount),
+    differenceAmount: row.difference_amount == null ? undefined : Number(row.difference_amount),
+    totalEntries: Number(row.total_entries ?? 0),
+    totalExits: Number(row.total_exits ?? 0),
+    totalRevenue: Number(row.total_revenue ?? 0),
+    totalTransactions: Number(row.total_transactions ?? 0),
+    openingNotes: typeof row.opening_notes === "string" ? row.opening_notes : undefined,
+    closingNotes: typeof row.closing_notes === "string" ? row.closing_notes : undefined,
+    openedAt: parseDate(row.opened_at as string | undefined),
+    closedAt: row.closed_at ? parseDate(row.closed_at as string) : undefined,
+    report: toCashSessionReport((row.report as Record<string, unknown> | null | undefined) ?? undefined),
   };
 }
 

@@ -1,11 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Activity, Attendant, DashboardStats, OccupancyData, ParkingSpot, RevenueData } from "@/types/valet";
+import type { Activity, Attendant, CashSession, DashboardStats, OccupancyData, ParkingSpot, RevenueData } from "@/types/valet";
 import type { ManagedUserCreationResult, PurgeResult, Unit, UnitInvitation, UnitMember } from "@/types/management";
 import { addClientVehicle, chargeClient, createClient, listClients, updateClient } from "@/services/clients.service";
 import {
   EMPTY_DASHBOARD_STATS,
   ensureSupabaseConfigured,
   isSupabaseConfigured,
+  toCashSession,
   toActivity,
   toAttendant,
   toOccupancyData,
@@ -33,9 +34,11 @@ import type {
   CreateUnitInput,
   CreateUnitInvitationInput,
   MoveParkingSpotInput,
+  OpenCashSessionInput,
   PurgeUnitDataInput,
   RegisterExitInput,
   RemoveUnitMemberInput,
+  CloseCashSessionInput,
   UpdateClientInput,
   UpdateMyProfileInput,
   UpdateParkingSpotConfigInput,
@@ -56,9 +59,11 @@ export type {
   CreateUnitInput,
   CreateUnitInvitationInput,
   MoveParkingSpotInput,
+  OpenCashSessionInput,
   PurgeUnitDataInput,
   RegisterExitInput,
   RemoveUnitMemberInput,
+  CloseCashSessionInput,
   UpdateClientInput,
   UpdateMyProfileInput,
   UpdateParkingSpotConfigInput,
@@ -522,6 +527,71 @@ async function purgeUnitData(input: PurgeUnitDataInput): Promise<PurgeResult> {
   };
 }
 
+async function listCashSessions(): Promise<CashSession[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("cash_sessions_view")
+    .select("*")
+    .order("opened_at", { ascending: false });
+
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map(toCashSession);
+}
+
+async function getCurrentCashSession(): Promise<CashSession | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("cash_sessions_view")
+    .select("*")
+    .eq("status", "open")
+    .order("opened_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return toCashSession(data);
+}
+
+async function openCashSession(input: OpenCashSessionInput): Promise<CashSession> {
+  ensureSupabaseConfigured();
+  const { data, error } = await supabase.rpc("open_cash_session", {
+    p_opening_amount: input.openingAmount,
+    p_opening_notes: input.openingNotes ?? null,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return toCashSession(data);
+}
+
+async function closeCashSession(input: CloseCashSessionInput): Promise<CashSession> {
+  ensureSupabaseConfigured();
+  const { data, error } = await supabase.rpc("close_current_cash_session", {
+    p_closing_amount: input.closingAmount,
+    p_closing_notes: input.closingNotes ?? null,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return toCashSession(data);
+}
+
 export const valetApi = {
   getVehicles: listVehicleStays,
   getAttendants: listAttendants,
@@ -549,6 +619,8 @@ export const valetApi = {
   deleteParkingSpot: (spotId: string) => deleteParkingSpot(spotId),
   moveParkingSpot: (input: MoveParkingSpotInput) => moveParkingSpot(input),
   getUnits: listUnits,
+  getCashSessions: listCashSessions,
+  getCurrentCashSession: getCurrentCashSession,
   getUnitMembers: listUnitMembers,
   getUnitInvitations: listUnitInvitations,
   createUnit: (input: CreateUnitInput) => createUnit(input),
@@ -557,6 +629,8 @@ export const valetApi = {
   updateUnitMemberRole: (input: UpdateUnitMemberRoleInput) => updateUnitMemberRole(input),
   removeUnitMember: (input: RemoveUnitMemberInput) => removeUnitMember(input),
   purgeUnitData: (input: PurgeUnitDataInput) => purgeUnitData(input),
+  openCashSession: (input: OpenCashSessionInput) => openCashSession(input),
+  closeCashSession: (input: CloseCashSessionInput) => closeCashSession(input),
   updateMyProfile: (input: UpdateMyProfileInput) => updateMyProfile(input),
 };
 function toManagedUserCreationResult(row: Record<string, unknown>): ManagedUserCreationResult {
