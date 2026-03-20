@@ -15,7 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { calculateAgreementClientFee, calculateMonthlyClientFee } from "@/config/pricing";
 import { useChargeClientMutation } from "@/hooks/useValetData";
+import { useAppSettings } from "@/lib/app-settings";
 import { formatCurrencyBRL } from "@/lib/format";
 import type { Client, PaymentMethod } from "@/types/valet";
 
@@ -41,15 +43,27 @@ interface ClientChargeDialogProps {
 
 export function ClientChargeDialog({ open, onOpenChange, client }: ClientChargeDialogProps) {
   const chargeClient = useChargeClientMutation();
+  const settings = useAppSettings();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const nextDueDate = useMemo(() => (client ? buildNextDueDate(client) : null), [client]);
+  const chargeAmount = useMemo(() => {
+    if (!client) return 0;
+
+    if (client.monthlyFee > 0) {
+      return client.monthlyFee;
+    }
+
+    return client.category === "agreement"
+      ? calculateAgreementClientFee(client.includedSpots, client.vipSpots, settings)
+      : calculateMonthlyClientFee(client.isVip, settings);
+  }, [client, settings]);
 
   const handleConfirm = async () => {
     if (!client) return;
     setSubmitError(null);
     try {
-      await chargeClient.mutateAsync({ clientId: client.id, paymentMethod });
+      await chargeClient.mutateAsync({ clientId: client.id, paymentMethod, amount: chargeAmount });
       onOpenChange(false);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Nao foi possivel registrar a cobranca.");
@@ -71,7 +85,7 @@ export function ClientChargeDialog({ open, onOpenChange, client }: ClientChargeD
         <div className="space-y-3 text-sm">
           <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
             <p><strong>Cliente:</strong> {client.name}</p>
-            <p><strong>Valor:</strong> {formatCurrencyBRL(client.monthlyFee)}</p>
+            <p><strong>Valor:</strong> {formatCurrencyBRL(chargeAmount)}</p>
             <p><strong>Vencimento atual:</strong> {client.billingDueDate.toLocaleDateString("pt-BR")}</p>
             <p><strong>Proximo vencimento:</strong> {nextDueDate?.toLocaleDateString("pt-BR")}</p>
           </div>

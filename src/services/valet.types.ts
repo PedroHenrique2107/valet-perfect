@@ -91,6 +91,9 @@ export interface CreateClientInput {
   isVip?: boolean;
   includedSpots?: number;
   vipSpots?: number;
+  monthlyFee: number;
+  billingDueDay: number;
+  billingDueDate: string;
   vehicles: string[];
   vehicleDrivers?: Record<string, string>;
   vehicleModels?: Record<string, string>;
@@ -107,6 +110,7 @@ export interface UpdateClientInput {
   isVip?: boolean;
   includedSpots?: number;
   vipSpots?: number;
+  monthlyFee: number;
   vehicleDrivers?: Record<string, string>;
   vehicleModels?: Record<string, string>;
 }
@@ -121,6 +125,7 @@ export interface AddClientVehicleInput {
 export interface ChargeClientInput {
   clientId: string;
   paymentMethod: Transaction["paymentMethod"];
+  amount?: number;
 }
 
 export interface CreateAttendantInput {

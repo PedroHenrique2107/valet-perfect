@@ -46,10 +46,23 @@ export function ClientVehicleDialog({ open, onOpenChange, client }: ClientVehicl
   const onSubmit = form.handleSubmit(async (values) => {
     if (!client) return;
     setSubmitError(null);
+
+    const normalizedPlate = normalizePlate(values.plate);
+
+    if (client.vehicles.some((plate) => normalizePlate(plate) === normalizedPlate)) {
+      setSubmitError("Esta placa ja esta vinculada a este cliente.");
+      return;
+    }
+
+    if (client.category === "monthly" && client.vehicles.length >= 3) {
+      setSubmitError("Mensalista pode cadastrar no maximo 3 placas.");
+      return;
+    }
+
     try {
       await addClientVehicle.mutateAsync({
         clientId: client.id,
-        plate: values.plate,
+        plate: normalizedPlate,
         driverName: values.driverName,
         model: values.model,
       });

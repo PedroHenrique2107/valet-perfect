@@ -127,6 +127,7 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
         isVip: client.category === "monthly" ? values.isVip : undefined,
         includedSpots: client.category === "agreement" ? includedSpots : undefined,
         vipSpots: client.category === "agreement" ? vipSpots : undefined,
+        monthlyFee: projectedFee,
         vehicleDrivers: client.category === "agreement" ? driverNames : undefined,
         vehicleModels,
       });

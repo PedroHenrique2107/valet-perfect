@@ -253,6 +253,9 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
         isVip: values.category === "monthly" ? values.isVip : undefined,
         includedSpots: category === "agreement" ? includedSpots : 1,
         vipSpots: category === "agreement" ? vipSpots : values.isVip ? 1 : 0,
+        monthlyFee: fee,
+        billingDueDay: initialDueDate.getDate(),
+        billingDueDate: initialDueDate.toISOString(),
         vehicles,
         vehicleModels,
       });
