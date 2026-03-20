@@ -25,6 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useClientsQuery, useCreateVehicleMutation, useParkingSpotsQuery } from "@/hooks/useValetData";
 import { useAppSettings } from "@/lib/app-settings";
+import { findParkingSpotByIdentifier } from "@/lib/parking-spots";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrencyBRL } from "@/lib/format";
 import type { Client, ContractType } from "@/types/valet";
@@ -239,6 +240,17 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
   }, [matchedClient?.isVip, parkingSpots]);
 
   useEffect(() => {
+    const selectedSpotId = form.getValues("spotId");
+    if (!selectedSpotId) {
+      return;
+    }
+
+    if (!findParkingSpotByIdentifier(availableSpots, selectedSpotId)) {
+      form.setValue("spotId", "", { shouldValidate: true });
+    }
+  }, [availableSpots, form]);
+
+  useEffect(() => {
     if (!open) return;
     form.reset({
       plate: "",
@@ -377,7 +389,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                   </SelectTrigger>
                   <SelectContent>
                     {availableSpots.map((spot) => (
-                      <SelectItem key={spot.id} value={spot.code}>
+                      <SelectItem key={spot.id} value={spot.id}>
                         {spot.code} - Piso {spot.floor}
                       </SelectItem>
                     ))}

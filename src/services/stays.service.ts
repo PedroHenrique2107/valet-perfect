@@ -3,6 +3,32 @@ import type { Vehicle } from "@/types/valet";
 import { ensureSupabaseConfigured, isSupabaseConfigured, parseDate, toVehicle } from "@/services/service-utils";
 import type { CreateVehicleInput, RegisterExitInput, UpdateVehicleSpotInput } from "@/services/valet.types";
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function resolveParkingSpotId(spotIdentifier: string) {
+  const normalizedIdentifier = spotIdentifier.trim();
+
+  if (!normalizedIdentifier) {
+    throw new Error("Selecione uma vaga valida.");
+  }
+
+  const query = UUID_PATTERN.test(normalizedIdentifier)
+    ? supabase.from("parking_spots").select("id").eq("id", normalizedIdentifier).maybeSingle()
+    : supabase.from("parking_spots").select("id").eq("code", normalizedIdentifier).maybeSingle();
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data?.id) {
+    throw new Error("A vaga selecionada nao foi encontrada. Atualize a pagina e tente novamente.");
+  }
+
+  return String(data.id);
+}
+
 export async function listVehicleStays(): Promise<Vehicle[]> {
   if (!isSupabaseConfigured()) {
     return [];
@@ -22,11 +48,12 @@ export async function listVehicleStays(): Promise<Vehicle[]> {
 
 export async function createVehicleStay(input: CreateVehicleInput): Promise<Vehicle> {
   ensureSupabaseConfigured();
+  const parkingSpotId = await resolveParkingSpotId(input.spotId);
   const { data, error } = await supabase
     .from("vehicle_stays")
     .insert({
       plate: input.plate.trim().toUpperCase(),
-      parking_spot_id: input.spotId,
+      parking_spot_id: parkingSpotId,
       model: input.model.trim(),
       brand: "",
       color: "",
@@ -84,9 +111,10 @@ export async function registerVehicleExit(input: RegisterExitInput): Promise<Veh
 
 export async function moveVehicleToSpot(input: UpdateVehicleSpotInput): Promise<Vehicle> {
   ensureSupabaseConfigured();
+  const parkingSpotId = await resolveParkingSpotId(input.spotId);
   const { data, error } = await supabase.rpc("move_vehicle_spot", {
     p_stay_id: input.vehicleId,
-    p_parking_spot_id: input.spotId,
+    p_parking_spot_id: parkingSpotId,
   });
 
   if (error) {

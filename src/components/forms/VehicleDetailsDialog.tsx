@@ -17,6 +17,7 @@ import {
 import { useParkingSpotsQuery, useUpdateVehicleSpotMutation } from "@/hooks/useValetData";
 import { useAppSettings } from "@/lib/app-settings";
 import { formatCurrencyBRL, formatDateTimeBR, formatDurationPrecise } from "@/lib/format";
+import { findParkingSpotByIdentifier, getParkingSpotLabel } from "@/lib/parking-spots";
 import type { Attendant, Transaction, Vehicle } from "@/types/valet";
 
 interface VehicleDetailsDialogProps {
@@ -71,8 +72,8 @@ export function VehicleDetailsDialog({
 
   useEffect(() => {
     if (!vehicle) return;
-    setSelectedSpot(vehicle.spotId);
-  }, [vehicle]);
+    setSelectedSpot(findParkingSpotByIdentifier(parkingSpots, vehicle.spotId)?.id ?? vehicle.spotId);
+  }, [parkingSpots, vehicle]);
 
   const attendantName = useMemo(() => {
     if (!vehicle) return "-";
@@ -95,8 +96,9 @@ export function VehicleDetailsDialog({
   const finalTime = vehicle.exitTime?.getTime() ?? now;
   const totalSeconds = Math.max(0, Math.floor((finalTime - startTime.getTime()) / 1000));
   const latestTx = vehicleTx[0];
+  const currentSpot = findParkingSpotByIdentifier(parkingSpots, vehicle.spotId);
   const selectableSpots = parkingSpots
-    .filter((spot) => spot.status === "available" || spot.code === vehicle.spotId)
+    .filter((spot) => spot.status === "available" || spot.id === currentSpot?.id)
     .sort((a, b) => a.code.localeCompare(b.code));
 
   const inspectionOkList = vehicle.inspection
@@ -147,7 +149,7 @@ export function VehicleDetailsDialog({
               </SelectTrigger>
               <SelectContent>
                 {selectableSpots.map((spot) => (
-                  <SelectItem key={spot.id} value={spot.code}>
+                  <SelectItem key={spot.id} value={spot.id}>
                     {spot.code}
                   </SelectItem>
                 ))}
@@ -156,7 +158,7 @@ export function VehicleDetailsDialog({
             <Button
               type="button"
               variant="outline"
-              disabled={vehicle.status === "delivered" || selectedSpot === vehicle.spotId || updateVehicleSpot.isPending}
+              disabled={vehicle.status === "delivered" || selectedSpot === (currentSpot?.id ?? vehicle.spotId) || updateVehicleSpot.isPending}
               onClick={() => updateVehicleSpot.mutate({ vehicleId: vehicle.id, spotId: selectedSpot })}
             >
               {updateVehicleSpot.isPending ? "Salvando..." : "Salvar vaga"}
@@ -171,7 +173,7 @@ export function VehicleDetailsDialog({
               <div className="space-y-2">
                 {vehicle.spotHistory.map((entry, index) => (
                   <p key={`${entry.spotId}-${entry.changedAt.getTime()}-${index}`}>
-                    {entry.spotId} - {formatDateTimeBR(entry.changedAt)} - {entry.changedBy}
+                    {getParkingSpotLabel(parkingSpots, entry.spotId)} - {formatDateTimeBR(entry.changedAt)} - {entry.changedBy}
                   </p>
                 ))}
               </div>

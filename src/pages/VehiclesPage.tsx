@@ -13,11 +13,13 @@ import { Input } from "@/components/ui/input";
 import { useCan } from "@/contexts/AuthContext";
 import {
   useAttendantsQuery,
+  useParkingSpotsQuery,
   useRequestVehicleMutation,
   useTransactionsQuery,
   useVehiclesQuery,
 } from "@/hooks/useValetData";
 import { useAppSettings } from "@/lib/app-settings";
+import { getParkingSpotLabel } from "@/lib/parking-spots";
 import { filterVehicles } from "@/lib/selectors";
 import { cn } from "@/lib/utils";
 import type { Vehicle, VehicleStatus } from "@/types/valet";
@@ -49,6 +51,7 @@ export default function VehiclesPage() {
 
   const { data: vehicles = [] } = useVehiclesQuery();
   const { data: attendants = [] } = useAttendantsQuery();
+  const { data: parkingSpots = [] } = useParkingSpotsQuery();
   const { data: transactions = [] } = useTransactionsQuery();
   const requestVehicle = useRequestVehicleMutation();
 
@@ -203,6 +206,7 @@ export default function VehiclesPage() {
                 <VehicleStatusCard
                   key={vehicle.id}
                   vehicle={vehicle}
+                  spotLabel={getParkingSpotLabel(parkingSpots, vehicle.spotId)}
                   canRequest={canCreateVehicle}
                   canRegisterExit={canRegisterExit}
                   onRequestVehicle={(item) => requestVehicle.mutate(item.id)}

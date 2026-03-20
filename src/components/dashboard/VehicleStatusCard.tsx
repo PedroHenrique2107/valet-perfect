@@ -14,6 +14,7 @@ import type { Vehicle } from "@/types/valet";
 
 interface VehicleStatusCardProps {
   vehicle: Vehicle;
+  spotLabel?: string;
   className?: string;
   canRequest?: boolean;
   canRegisterExit?: boolean;
@@ -41,6 +42,7 @@ const contractLabel: Record<string, string> = {
 
 export function VehicleStatusCard({
   vehicle,
+  spotLabel,
   className,
   canRequest = true,
   canRegisterExit = true,
@@ -153,7 +155,7 @@ export function VehicleStatusCard({
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <MapPin className="h-3.5 w-3.5" />
-          <span className="font-mono">{vehicle.spotId}</span>
+          <span className="font-mono">{spotLabel ?? vehicle.spotId}</span>
         </div>
         <div className="col-span-2 flex items-center gap-1.5 text-muted-foreground">
           <User className="h-3.5 w-3.5" />
