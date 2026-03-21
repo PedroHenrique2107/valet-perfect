@@ -169,8 +169,8 @@ export default function SettingsPage() {
     toast({
       title: "Usuario criado",
       description: invite.sendInviteEmail
-        ? "A conta foi criada no Supabase e o convite por e-mail foi disparado."
-        : "A conta foi criada no Supabase e vinculada a unidade.",
+        ? "A conta local foi criada no mockDB e marcada como pendente de convite."
+        : "A conta local foi criada no mockDB e vinculada a unidade.",
     });
   };
 
@@ -180,12 +180,12 @@ export default function SettingsPage() {
     await refreshUser();
     toast({
       title: "Perfil atualizado",
-      description: "Seu cadastro foi salvo. Se o e-mail mudou, o Supabase pode pedir confirmacao.",
+      description: "Seu cadastro local foi salvo no mockDB.",
     });
   };
 
   const purgeNow = async () => {
-    const confirmed = window.confirm("Excluir os dados operacionais marcados da unidade atual no banco?");
+    const confirmed = window.confirm("Excluir os dados operacionais marcados da unidade atual no mockDB?");
     if (!confirmed) return;
     await purgeUnitData.mutateAsync(purgeConfig);
     toast({ title: "Limpeza concluida", description: "Os dados selecionados foram removidos da unidade." });
@@ -420,7 +420,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><UserCog className="h-5 w-5 text-primary" />Usuarios por unidade</CardTitle>
-                <CardDescription>Agora a criacao tambem gera a conta no Supabase e pode disparar convite por e-mail.</CardDescription>
+                <CardDescription>As contas agora sao criadas localmente no mockDB para voce finalizar o fluxo sem banco real.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-2">
@@ -471,12 +471,12 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Enviar convite por e-mail</p>
-                      <p className="text-xs text-muted-foreground">O usuario ja fica criado no Supabase e recebe o acesso pelo e-mail cadastrado.</p>
+                      <p className="text-xs text-muted-foreground">No modo local isso so define se o usuario entra como pendente ou ja vinculado.</p>
                     </div>
                     <Switch checked={invite.sendInviteEmail} onCheckedChange={(checked) => setInvite((current) => ({ ...current, sendInviteEmail: checked }))} />
                   </div>
                 </div>
-                <Button className="w-full" disabled={createManagedUser.isPending} onClick={() => void createNewUser()}>{createManagedUser.isPending ? "Criando..." : "Criar usuario no Supabase"}</Button>
+                <Button className="w-full" disabled={createManagedUser.isPending} onClick={() => void createNewUser()}>{createManagedUser.isPending ? "Criando..." : "Criar usuario local"}</Button>
 
                 {unitMembers.map((member) => (
                   <div key={`${member.userId}-${member.unitId}`} className="rounded-xl border border-border/50 p-3">
@@ -530,7 +530,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Trash2 className="h-5 w-5 text-destructive" />Limpeza total</CardTitle>
-                <CardDescription>Exclui de uma vez clientes, manobristas e veiculos da unidade atual no banco.</CardDescription>
+                <CardDescription>Exclui de uma vez clientes, manobristas e veiculos da unidade atual no mockDB.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between rounded-xl border border-border/50 p-3"><span className="text-sm">Excluir clientes</span><Switch checked={purgeConfig.deleteClients} onCheckedChange={(checked) => setPurgeConfig((current) => ({ ...current, deleteClients: checked }))} /></div>

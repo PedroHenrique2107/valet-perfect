@@ -3,7 +3,6 @@ import { AlertTriangle, Wallet } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { Button } from "@/components/ui/button";
 import { useCurrentCashSessionQuery } from "@/hooks/useValetData";
-import { isSupabaseConfigured } from "@/services/service-utils";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -13,7 +12,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: currentCashSession, isLoading } = useCurrentCashSessionQuery();
-  const shouldBlock = isSupabaseConfigured() && !isLoading && !currentCashSession && location.pathname !== "/cash";
+  const shouldBlock = !isLoading && !currentCashSession && location.pathname !== "/cash";
 
   return (
     <div className="flex h-screen overflow-hidden">
