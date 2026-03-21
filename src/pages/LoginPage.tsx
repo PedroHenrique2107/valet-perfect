@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getRememberedEmail, getRememberMePreference, setRememberedEmail, setRememberMePreference } from "@/lib/auth-storage";
 
 export default function LoginPage() {
-  const { session, user, loading, signIn, requestPasswordReset, updatePassword } = useAuth();
+  const { session, user, loading, signIn, resetMockDb, requestPasswordReset, updatePassword } = useAuth();
   const [email, setEmail] = useState(() => getRememberedEmail());
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -102,11 +102,19 @@ export default function LoginPage() {
           </p>
           <div className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-slate-200">
             <p className="font-semibold">Contas demo</p>
-            <p className="mt-2">admin@valetperfect.local</p>
-            <p>lider@valetperfect.local</p>
-            <p>manobrista@valetperfect.local</p>
-            <p>caixa@valetperfect.local</p>
+            <p className="mt-2">admin@valettracker.com</p>
+            <p>lider@valettracker.com</p>
+            <p>manobrista@valettracker.com</p>
+            <p>caixa@valettracker.com</p>
             <p className="mt-3 text-sky-200">Senha padrao: 123456</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+              onClick={() => void resetMockDb()}
+            >
+              Resetar mockDB
+            </Button>
           </div>
         </section>
 

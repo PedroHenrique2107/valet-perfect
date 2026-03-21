@@ -10,6 +10,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  resetMockDb: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ message: string }>;
   updatePassword: (password: string) => Promise<void>;
   can: (permission: Permission) => boolean;
@@ -73,6 +74,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await refreshUser();
       },
       refreshUser,
+      resetMockDb: async () => {
+        mockDb.reset();
+        await refreshUser();
+      },
       requestPasswordReset: async (email) => mockDb.requestPasswordReset(email),
       updatePassword: async (password) => {
         await mockDb.updatePassword(password);

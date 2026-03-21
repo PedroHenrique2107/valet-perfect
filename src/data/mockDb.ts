@@ -68,6 +68,8 @@ interface MockDbState {
 }
 
 const STORAGE_KEY = "valet-perfect-mock-db";
+const STORAGE_VERSION_KEY = "valet-perfect-mock-db-version";
+const SEED_VERSION = "2026-03-21-login-sync-v1";
 const listeners = new Set<() => void>();
 
 function createId(prefix: string) {
@@ -163,6 +165,7 @@ function hydrateState(raw: MockDbState): MockDbState {
 function persistState(state: MockDbState) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, serializeState(state));
+  window.localStorage.setItem(STORAGE_VERSION_KEY, SEED_VERSION);
 }
 
 function notify() {
@@ -191,11 +194,11 @@ function seedState(): MockDbState {
   const users: MockUserRecord[] = [
     {
       id: adminId,
-      email: "admin@valetperfect.local",
+      email: "admin@valettracker.com",
       name: "Pedro",
       role: "admin",
       unitId,
-      phone: "(11) 99999-0001",
+      phone: "(19) 99713-4358",
       avatarUrl: null,
       password: "123456",
       status: "active",
@@ -203,7 +206,7 @@ function seedState(): MockDbState {
     },
     {
       id: leaderId,
-      email: "lider@valetperfect.local",
+      email: "lider@valettracker.com",
       name: "Camila Lider",
       role: "leader",
       unitId,
@@ -218,7 +221,7 @@ function seedState(): MockDbState {
     },
     {
       id: attendantId,
-      email: "manobrista@valetperfect.local",
+      email: "manobrista@valettracker.com",
       name: "Rafael Manobrista",
       role: "attendant",
       unitId,
@@ -233,7 +236,7 @@ function seedState(): MockDbState {
     },
     {
       id: cashierId,
-      email: "caixa@valetperfect.local",
+      email: "caixa@valettracker.com",
       name: "Bruna Caixa",
       role: "cashier",
       unitId,
@@ -491,8 +494,9 @@ let state: MockDbState = (() => {
     return seedState();
   }
 
+  const savedVersion = window.localStorage.getItem(STORAGE_VERSION_KEY);
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
+  if (!raw || savedVersion !== SEED_VERSION) {
     const seeded = seedState();
     persistState(seeded);
     return seeded;
