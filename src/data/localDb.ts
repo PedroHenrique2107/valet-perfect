@@ -460,6 +460,19 @@ function parseTimeToMinutes(value: string) {
   return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0);
 }
 
+function getLocalDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getLocalDateLabel(date: Date) {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}`;
+}
+
 function isNowWithinShift(startTime: string, endTime: string, now = new Date()) {
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const startMinutes = parseTimeToMinutes(startTime);
@@ -617,17 +630,22 @@ function buildNotificationsSnapshot(): AppNotification[] {
   const settings = getAppSettings();
   const now = new Date();
   const items: AppNotification[] = [];
+  let criticalCount = 0;
+  let warningCount = 0;
   const usableSpots = state.parkingSpots.filter((spot) => spot.status !== "maintenance" && spot.status !== "blocked");
   const occupiedSpots = usableSpots.filter((spot) => spot.status === "occupied");
   const occupancyRate = usableSpots.length > 0 ? Math.round((occupiedSpots.length / usableSpots.length) * 100) : 0;
 
   if (occupancyRate >= settings.alerts.occupancyThreshold) {
+    const severity = occupancyRate >= 95 ? "critical" : "warning";
+    if (severity === "critical") criticalCount += 1;
+    if (severity === "warning") warningCount += 1;
     items.push({
       id: "notification-occupancy-threshold",
       title: "Patio acima do limite de ocupacao",
       message: `${occupancyRate}% de ocupacao frente ao alerta configurado de ${settings.alerts.occupancyThreshold}%.`,
       kind: "occupancy",
-      severity: occupancyRate >= 95 ? "critical" : "warning",
+      severity,
       createdAt: now,
       read: false,
       actionLabel: "Reorganizar vagas",
@@ -640,13 +658,16 @@ function buildNotificationsSnapshot(): AppNotification[] {
       const baseTime = vehicle.requestedAt ?? vehicle.entryTime;
       const waitMinutes = Math.max(1, Math.round((now.getTime() - baseTime.getTime()) / 60_000));
       if (waitMinutes < 5) return;
+      const severity = waitMinutes >= 10 ? "critical" : "warning";
+      if (severity === "critical") criticalCount += 1;
+      if (severity === "warning") warningCount += 1;
 
       items.push({
         id: `notification-vehicle-${vehicle.id}`,
         title: `${vehicle.plate} com espera elevada`,
         message: `Fila de retirada em ${waitMinutes} minuto(s) para ${vehicle.clientName || "cliente nao identificado"}.`,
         kind: "vehicle",
-        severity: waitMinutes >= 10 ? "critical" : "warning",
+        severity,
         createdAt: baseTime,
         read: false,
         actionLabel: "Priorizar entrega",
@@ -657,12 +678,15 @@ function buildNotificationsSnapshot(): AppNotification[] {
 
   const overdueClients = state.clients.filter((client) => client.category === "monthly" && client.billingDueDate.getTime() < now.getTime());
   if (overdueClients.length > 0) {
+    const severity = overdueClients.length >= 3 ? "critical" : "warning";
+    if (severity === "critical") criticalCount += 1;
+    if (severity === "warning") warningCount += 1;
     items.push({
       id: "notification-overdue-clients",
       title: "Mensalistas com cobranca vencida",
       message: `${overdueClients.length} cliente(s) mensalista(s) com vencimento passado na base local.`,
       kind: "client",
-      severity: overdueClients.length >= 3 ? "critical" : "warning",
+      severity,
       createdAt: overdueClients[0]?.billingDueDate ?? now,
       read: false,
       actionLabel: "Cobrar clientes",
@@ -676,6 +700,7 @@ function buildNotificationsSnapshot(): AppNotification[] {
       ? Math.round((state.parkingSpots.filter((spot) => spot.status === "maintenance").length / state.parkingSpots.length) * 100)
       : 0;
   if (maintenanceRate >= settings.alerts.maintenanceThreshold) {
+    warningCount += 1;
     items.push({
       id: "notification-maintenance-threshold",
       title: "Vagas em manutencao acima do esperado",
@@ -691,6 +716,7 @@ function buildNotificationsSnapshot(): AppNotification[] {
   const currentShift = getCurrentShiftRule();
   const onlineAttendants = state.attendants.filter((attendant) => attendant.isOnline);
   if (onlineAttendants.length < currentShift.targetHeadcount) {
+    warningCount += 1;
     items.push({
       id: `notification-team-gap-${currentShift.id}`,
       title: "Equipe abaixo da meta do turno",
@@ -712,6 +738,7 @@ function buildNotificationsSnapshot(): AppNotification[] {
           Math.round((now.getTime() - (attendant.startedAt?.getTime() ?? now.getTime())) / 60_000),
         );
         if (workedMinutes <= attendant.maxWorkHours * 60) return;
+        criticalCount += 1;
 
         items.push({
           id: `notification-overtime-${attendant.id}`,
@@ -728,8 +755,155 @@ function buildNotificationsSnapshot(): AppNotification[] {
       });
   }
 
+  state.parkingSpots
+    .filter((spot) => spot.type === "vip" && spot.status === "occupied" && spot.vehicleId)
+    .forEach((spot) => {
+      const vehicle = state.vehicles.find((item) => item.id === spot.vehicleId);
+      const linkedClient = vehicle
+        ? vehicle.linkedClientId
+          ? state.clients.find((client) => client.id === vehicle.linkedClientId)
+          : findClientByPlate(vehicle.plate)
+        : undefined;
+      const isVip = Boolean(vehicle?.vipRequired || linkedClient?.isVip);
+
+      if (vehicle && !isVip) {
+        warningCount += 1;
+        items.push({
+          id: `notification-vip-spot-${spot.id}`,
+          title: `Vaga VIP ocupada fora do perfil`,
+          message: `${spot.code} esta ocupada por ${vehicle.plate}, mas o veiculo nao esta marcado como VIP.`,
+          kind: "vip",
+          severity: "warning",
+          createdAt: vehicle.entryTime,
+          read: false,
+          actionLabel: "Revisar alocacao",
+          relatedEntityId: vehicle.id,
+          relatedEntityType: "vehicle",
+        });
+      }
+    });
+
+  state.vehicles
+    .filter((vehicle) => {
+      const linkedClient = vehicle.linkedClientId
+        ? state.clients.find((client) => client.id === vehicle.linkedClientId)
+        : findClientByPlate(vehicle.plate);
+      return Boolean(vehicle.vipRequired || linkedClient?.isVip);
+    })
+    .forEach((vehicle) => {
+      const clientName = vehicle.clientName || "Cliente VIP";
+      const severity = vehicle.status === "requested" || vehicle.status === "in_transit" ? "warning" : "info";
+      if (severity === "warning") warningCount += 1;
+      items.push({
+        id: `notification-vip-service-${vehicle.id}`,
+        title: `${clientName} em atendimento prioritario`,
+        message: `Acompanhar ${vehicle.plate} com prioridade durante ${vehicle.status === "parked" ? "estadia" : "retirada"}.`,
+        kind: "vip",
+        severity,
+        createdAt: vehicle.requestedAt ?? vehicle.entryTime,
+        read: severity === "info",
+        actionLabel: "Acompanhar atendimento",
+        relatedEntityId: vehicle.id,
+        relatedEntityType: "vehicle",
+      });
+    });
+
+  state.transactions
+    .filter((transaction) => transaction.status === "pending" || transaction.status === "failed")
+    .forEach((transaction) => {
+      const severity = transaction.status === "failed" ? "critical" : "warning";
+      if (severity === "critical") criticalCount += 1;
+      if (severity === "warning") warningCount += 1;
+      items.push({
+        id: `notification-payment-${transaction.id}`,
+        title: transaction.status === "failed" ? "Falha no pagamento" : "Pagamento pendente",
+        message: `${transaction.receiptNumber} esta ${transaction.status === "failed" ? "com falha" : "pendente"} no valor de ${transaction.amount}.`,
+        kind: "payment",
+        severity,
+        createdAt: transaction.createdAt,
+        read: false,
+        actionLabel: "Revisar recebimento",
+        relatedEntityId: transaction.id,
+        relatedEntityType: "cash-session",
+      });
+    });
+
+  state.cashSessions
+    .filter((session) => session.status === "closed" && typeof session.differenceAmount === "number" && Math.abs(session.differenceAmount) > 0)
+    .slice(0, 3)
+    .forEach((session) => {
+      const severity = Math.abs(session.differenceAmount ?? 0) >= 50 ? "critical" : "warning";
+      if (severity === "critical") criticalCount += 1;
+      if (severity === "warning") warningCount += 1;
+      items.push({
+        id: `notification-cash-difference-${session.id}`,
+        title: "Diferenca no fechamento do caixa",
+        message: `Fechamento de ${session.attendantName} registrou diferenca de ${session.differenceAmount}.`,
+        kind: "cash",
+        severity,
+        createdAt: session.closedAt ?? session.openedAt,
+        read: false,
+        actionLabel: "Auditar fechamento",
+        relatedEntityId: session.id,
+        relatedEntityType: "cash-session",
+      });
+    });
+
+  state.clients
+    .filter((client) => now.getTime() - client.createdAt.getTime() <= 48 * 60 * 60_000)
+    .slice(0, 3)
+    .forEach((client) => {
+      items.push({
+        id: `notification-new-client-${client.id}`,
+        title: "Novo cliente cadastrado",
+        message: `${client.name} foi incluido na base com perfil ${client.category === "monthly" ? "mensalista" : "credenciado"}.`,
+        kind: "system",
+        severity: "info",
+        createdAt: client.createdAt,
+        read: true,
+        actionLabel: "Ver cadastro",
+        relatedEntityId: client.id,
+        relatedEntityType: "client",
+      });
+    });
+
+  state.units
+    .filter((unit) => now.getTime() - unit.createdAt.getTime() <= 7 * 24 * 60 * 60_000)
+    .slice(0, 2)
+    .forEach((unit) => {
+      items.push({
+        id: `notification-new-unit-${unit.id}`,
+        title: "Nova unidade criada",
+        message: `${unit.name} foi adicionada recentemente ao ambiente local.`,
+        kind: "system",
+        severity: "info",
+        createdAt: unit.createdAt,
+        read: true,
+        actionLabel: "Ver configuracoes",
+      });
+    });
+
+  state.users
+    .filter((user) => now.getTime() - new Date(user.createdAt).getTime() <= 72 * 60 * 60_000)
+    .slice(0, 4)
+    .forEach((user) => {
+      items.push({
+        id: `notification-new-user-${user.id}`,
+        title: "Novo usuario vinculado",
+        message: `${user.name} entrou na unidade com perfil ${user.role}.`,
+        kind: "system",
+        severity: "info",
+        createdAt: new Date(user.createdAt),
+        read: true,
+        actionLabel: "Ver equipe",
+        relatedEntityId: user.id,
+        relatedEntityType: "attendant",
+      });
+    });
+
   const openCash = currentOpenCashSession();
   if (!openCash) {
+    criticalCount += 1;
     items.push({
       id: "notification-cash-closed",
       title: "Caixa fechado",
@@ -752,6 +926,20 @@ function buildNotificationsSnapshot(): AppNotification[] {
       actionLabel: "Ver caixa",
       relatedEntityId: openCash.id,
       relatedEntityType: "cash-session",
+    });
+  }
+
+  const todayActivities = state.activities.filter((activity) => activity.time === "agora" || state.activities.indexOf(activity) < 5);
+  if (criticalCount > 0 || warningCount > 0 || todayActivities.length > 0) {
+    items.push({
+      id: "notification-daily-summary",
+      title: "Resumo critico do dia",
+      message: `${criticalCount} alerta(s) critico(s), ${warningCount} ponto(s) de atencao e ${todayActivities.length} atividade(s) recente(s) em destaque.`,
+      kind: "activity",
+      severity: criticalCount > 0 ? "critical" : warningCount > 0 ? "warning" : "info",
+      createdAt: now,
+      read: false,
+      actionLabel: "Abrir painel do dia",
     });
   }
 
@@ -961,14 +1149,29 @@ export const localDb = {
   async getRevenueData(): Promise<RevenueData[]> {
     const grouped = new Map<string, RevenueData>();
     state.transactions.forEach((transaction) => {
-      const key = transaction.createdAt.toISOString().slice(0, 10);
+      const key = getLocalDateKey(transaction.createdAt);
       const current = grouped.get(key) ?? { date: key, revenue: 0, transactions: 0 };
       current.revenue += transaction.status === "completed" ? transaction.amount : 0;
       current.transactions += 1;
       grouped.set(key, current);
     });
 
-    return Array.from(grouped.values()).sort((left, right) => left.date.localeCompare(right.date));
+    const result: RevenueData[] = [];
+    for (let index = 6; index >= 0; index -= 1) {
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() - index);
+      const key = getLocalDateKey(date);
+      const existing = grouped.get(key);
+
+      result.push({
+        date: getLocalDateLabel(date),
+        revenue: existing?.revenue ?? 0,
+        transactions: existing?.transactions ?? 0,
+      });
+    }
+
+    return result;
   },
 
   async getOccupancyData(): Promise<OccupancyData[]> {

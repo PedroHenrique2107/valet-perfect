@@ -47,6 +47,14 @@ function getKindLabel(kind: NotificationKind) {
       return "Equipe";
     case "maintenance":
       return "Patio";
+    case "vip":
+      return "VIP";
+    case "payment":
+      return "Pagamento";
+    case "system":
+      return "Sistema";
+    case "activity":
+      return "Resumo";
   }
 }
 

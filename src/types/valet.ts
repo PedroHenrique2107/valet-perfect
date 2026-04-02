@@ -237,7 +237,17 @@ export interface OperationEvent {
   relatedEntityType?: "vehicle" | "client" | "cash-session" | "attendant" | "parking-spot";
 }
 
-export type NotificationKind = "occupancy" | "vehicle" | "client" | "cash" | "team" | "maintenance";
+export type NotificationKind =
+  | "occupancy"
+  | "vehicle"
+  | "client"
+  | "cash"
+  | "team"
+  | "maintenance"
+  | "vip"
+  | "payment"
+  | "system"
+  | "activity";
 export type NotificationSeverity = "info" | "warning" | "critical" | "success";
 
 export interface AppNotification {
