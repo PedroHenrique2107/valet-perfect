@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import type { UserRole } from "@/types/auth";
@@ -11,6 +11,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
   const { user, session, loading, signOut } = useAuth();
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -35,9 +36,14 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
             Seu usuario esta autenticado, mas ainda nao possui permissao para esta area.
           </p>
-          <Button className="mt-6" variant="outline" onClick={() => void signOut()}>
-            Sair
-          </Button>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button variant="outline" onClick={() => navigate("/")}>
+              Voltar para home
+            </Button>
+            <Button variant="outline" onClick={() => void signOut()}>
+              Sair
+            </Button>
+          </div>
         </div>
       </div>
     );

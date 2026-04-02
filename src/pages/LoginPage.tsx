@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Eye, EyeOff, Loader2, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -275,6 +275,10 @@ export default function LoginPage() {
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {submitting ? (hasUsers ? "Entrando..." : "Criando acesso...") : hasUsers ? "Acessar plataforma" : "Criar primeiro acesso"}
             </Button>
+
+            <Link to="/m/login" className="block text-center text-sm font-medium text-sky-700 transition hover:text-sky-900">
+              Acesso mobile do manobrista
+            </Link>
           </CardContent>
         </Card>
       </div>
@@ -368,3 +372,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+

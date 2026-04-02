@@ -40,6 +40,8 @@ export interface ManagedUserCreationResult {
   status: "linked" | "pending";
   email: string;
   name: string;
+  role: Exclude<UserRole, "admin">;
+  temporaryPassword: string;
 }
 
 export interface PurgeResult {

@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { resetAppSettings, saveAppSettings, useAppSettings, type AppSettings } from "@/lib/app-settings";
 import { getGlobalSectionOrder, sortSectionsByOrder } from "@/lib/parkingLayout";
 import type { UserRole } from "@/types/auth";
+import type { ManagedUserCreationResult } from "@/types/management";
 
 function cloneSettings(settings: AppSettings): AppSettings {
   return {
@@ -93,6 +94,7 @@ export default function SettingsPage() {
     deleteAttendants: true,
     deleteVehicles: true,
   });
+  const [lastCreatedUser, setLastCreatedUser] = useState<ManagedUserCreationResult | null>(null);
 
   useEffect(() => {
     setDraft(cloneSettings(settings));
@@ -157,7 +159,8 @@ export default function SettingsPage() {
 
   const createNewUser = async () => {
     if (!invite.unitId || !invite.name.trim() || !invite.email.trim()) return;
-    await createManagedUser.mutateAsync(invite);
+    const result = await createManagedUser.mutateAsync(invite);
+    setLastCreatedUser(result);
     setInvite((current) => ({
       ...current,
       name: "",
@@ -168,9 +171,7 @@ export default function SettingsPage() {
     }));
     toast({
       title: "Usuario criado",
-      description: invite.sendInviteEmail
-        ? "A conta local foi criada e marcada como pendente de convite."
-        : "A conta local foi criada e vinculada a unidade.",
+      description: `${result.email} criado com senha temporaria ${result.temporaryPassword}.`,
     });
   };
 
@@ -477,6 +478,24 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <Button className="w-full" disabled={createManagedUser.isPending} onClick={() => void createNewUser()}>{createManagedUser.isPending ? "Criando..." : "Criar usuario local"}</Button>
+
+                {lastCreatedUser ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="text-sm font-semibold text-emerald-900">Credenciais do ultimo usuario criado</p>
+                    <p className="mt-2 text-sm text-emerald-800">
+                      {lastCreatedUser.name} • {getRoleDisplayName(lastCreatedUser.role)}
+                    </p>
+                    <p className="mt-2 text-sm text-emerald-900">
+                      <span className="font-medium">E-mail:</span> {lastCreatedUser.email}
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-900">
+                      <span className="font-medium">Senha temporaria:</span> {lastCreatedUser.temporaryPassword}
+                    </p>
+                    <p className="mt-2 text-xs text-emerald-700">
+                      Use estas credenciais para testar o login do perfil agora. No mobile, o perfil valido e apenas manobrista.
+                    </p>
+                  </div>
+                ) : null}
 
                 {unitMembers.map((member) => (
                   <div key={`${member.userId}-${member.unitId}`} className="rounded-xl border border-border/50 p-3">

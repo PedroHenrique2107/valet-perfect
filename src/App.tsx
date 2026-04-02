@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { MobileProtectedRoute } from "@/mobile/components/MobileProtectedRoute";
 import NotFound from "./pages/NotFound";
 
 const Index = lazy(() => import("./pages/Index"));
@@ -20,6 +21,11 @@ const ClientsPage = lazy(() => import("./pages/ClientsPage"));
 const EventsPage = lazy(() => import("./pages/EventsPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const MobileLoginPage = lazy(() => import("./mobile/pages/MobileLoginPage"));
+const MobileHomePage = lazy(() => import("./mobile/pages/MobileHomePage"));
+const MobileVehiclesPage = lazy(() => import("./mobile/pages/MobileVehiclesPage"));
+const MobileParkingPage = lazy(() => import("./mobile/pages/MobileParkingPage"));
+const MobileProfilePage = lazy(() => import("./mobile/pages/MobileProfilePage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +47,39 @@ const App = () => (
           <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Carregando...</div>}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/m/login" element={<MobileLoginPage />} />
+              <Route
+                path="/m"
+                element={
+                  <MobileProtectedRoute>
+                    <MobileHomePage />
+                  </MobileProtectedRoute>
+                }
+              />
+              <Route
+                path="/m/vehicles"
+                element={
+                  <MobileProtectedRoute>
+                    <MobileVehiclesPage />
+                  </MobileProtectedRoute>
+                }
+              />
+              <Route
+                path="/m/patio"
+                element={
+                  <MobileProtectedRoute>
+                    <MobileParkingPage />
+                  </MobileProtectedRoute>
+                }
+              />
+              <Route
+                path="/m/profile"
+                element={
+                  <MobileProtectedRoute>
+                    <MobileProfilePage />
+                  </MobileProtectedRoute>
+                }
+              />
               <Route
                 path="/"
                 element={

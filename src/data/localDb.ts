@@ -1671,6 +1671,7 @@ export const localDb = {
     const unit = state.units.find((item) => item.id === unitId);
     const userId = createId("user");
     const invitationId = createId("invite");
+    const temporaryPassword = createId("pwd");
     const user: LocalUserRecord = {
       id: userId,
       email: input.email.trim().toLowerCase(),
@@ -1679,7 +1680,7 @@ export const localDb = {
       unitId,
       phone: input.phone?.trim() || null,
       avatarUrl: null,
-      password: createId("pwd"),
+      password: temporaryPassword,
       status: input.sendInviteEmail === false ? "active" : "invited",
       workPeriodStart: input.workPeriodStart,
       workPeriodEnd: input.workPeriodEnd,
@@ -1741,6 +1742,8 @@ export const localDb = {
       status: input.sendInviteEmail === false ? "linked" : "pending",
       email: user.email,
       name: user.name,
+      role: input.role,
+      temporaryPassword,
     };
   },
 
