@@ -44,7 +44,7 @@ export default function LoginPage() {
     try {
       await signIn(email.trim(), password);
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Nao foi possivel entrar.");
+      setError(loginError instanceof Error ? loginError.message : "Não foi possivel entrar.");
     } finally {
       setSubmitting(false);
     }
@@ -57,7 +57,7 @@ export default function LoginPage() {
     }
 
     if (password !== confirmPassword) {
-      setError("As senhas nao conferem.");
+      setError("As senhas não conferem.");
       return;
     }
 
@@ -74,7 +74,7 @@ export default function LoginPage() {
         phone: setupPhone.trim() || undefined,
       });
     } catch (registerError) {
-      setError(registerError instanceof Error ? registerError.message : "Nao foi possivel criar o primeiro acesso.");
+      setError(registerError instanceof Error ? registerError.message : "Não foi possivel criar o primeiro acesso.");
     } finally {
       setSubmitting(false);
     }
@@ -87,9 +87,9 @@ export default function LoginPage() {
 
     try {
       const result = await requestPasswordReset(resetEmail.trim());
-      setResetMessage(`${result.message} Voce tambem pode definir uma nova senha abaixo, se ja estiver logado.`);
+      setResetMessage(`${result.message} Voce também pode definir uma nova senha abaixo, se já estiver logado.`);
     } catch (resetRequestError) {
-      setResetError(resetRequestError instanceof Error ? resetRequestError.message : "Nao foi possivel recuperar a senha.");
+      setResetError(resetRequestError instanceof Error ? resetRequestError.message : "Não foi possivel recuperar a senha.");
     } finally {
       setSendingReset(false);
     }
@@ -102,7 +102,7 @@ export default function LoginPage() {
     }
 
     if (newPassword !== passwordConfirmation) {
-      setResetError("As senhas nao conferem.");
+      setResetError("As senhas não conferem.");
       return;
     }
 
@@ -116,7 +116,7 @@ export default function LoginPage() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (updateError) {
-      setResetError(updateError instanceof Error ? updateError.message : "Nao foi possivel atualizar a senha.");
+      setResetError(updateError instanceof Error ? updateError.message : "Não foi possivel atualizar a senha.");
     } finally {
       setSavingPassword(false);
     }
@@ -130,9 +130,9 @@ export default function LoginPage() {
       <div className="relative grid w-full max-w-5xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="hidden rounded-[32px] border border-white/10 bg-white/5 p-10 text-white shadow-2xl shadow-sky-950/40 lg:block">
           <p className="text-sm uppercase tracking-[0.35em] text-sky-200/70">Valet Tracker</p>
-          <h1 className="mt-6 max-w-md font-serif text-5xl leading-tight">Operacao de valet em ambiente local, sem dados ficticios pre-carregados.</h1>
+          <h1 className="mt-6 max-w-md font-serif text-5xl leading-tight">Operação de valet em ambiente local</h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-slate-300">
-            Os dados operacionais agora comecam vazios. No primeiro acesso, crie o administrador local e siga preenchendo a base com dados reais.
+            Os dados operacionais agora começam vazios. No primeiro acesso, crie o administrador local e siga preenchendo a base com dados reais.
           </p>
           <div className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-slate-200">
             <p className="font-semibold">{hasUsers ? "Acesso local" : "Primeiro acesso"}</p>
@@ -151,7 +151,7 @@ export default function LoginPage() {
             </div>
             <CardTitle className="text-3xl font-semibold text-slate-950">Entrar</CardTitle>
             <CardDescription className="text-sm leading-6 text-slate-700">
-              {hasUsers ? "Use sua conta local para acessar a plataforma." : "Crie o primeiro acesso local para iniciar a operacao."}
+              {hasUsers ? "Use sua conta local para acessar a plataforma." : "Crie o primeiro acesso local para iniciar a operação."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -259,7 +259,7 @@ export default function LoginPage() {
                     setResetOpen(true);
                   }}
                 >
-                  Ajuda com a senha
+                  Esqueci minha senha
                 </button>
               </div>
             )}
@@ -293,7 +293,7 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <DialogTitle className="text-2xl font-semibold text-slate-950">Senha em modo local</DialogTitle>
                 <DialogDescription className="max-w-md text-sm leading-6 text-slate-600">
-                  Como o projeto esta sem servico de identidade externo, a redefinicao de senha acontece localmente.
+                  Como o projeto esta sem serviço de identidade externo, a redefinição de senha acontece localmente.
                 </DialogDescription>
               </div>
             </DialogHeader>
