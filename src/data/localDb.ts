@@ -1184,10 +1184,19 @@ export const localDb = {
   },
 
   async getDashboardStats(): Promise<DashboardStats> {
+    const now = new Date();
     const totalVehicles = state.vehicles.filter((vehicle) => vehicle.status !== "delivered").length;
     const availableSpots = state.parkingSpots.filter((spot) => spot.status === "available").length;
     const usableSpots = Math.max(1, state.parkingSpots.filter((spot) => spot.status !== "maintenance" && spot.status !== "blocked").length);
     const completedTransactions = state.transactions.filter((transaction) => transaction.status === "completed");
+    const todayCompletedTransactions = completedTransactions.filter((transaction) => {
+      const transactionDate = transaction.completedAt ?? transaction.createdAt;
+      return (
+        transactionDate.getFullYear() === now.getFullYear() &&
+        transactionDate.getMonth() === now.getMonth() &&
+        transactionDate.getDate() === now.getDate()
+      );
+    });
     const activeAttendants = state.attendants.filter((attendant) => attendant.isOnline).length;
     const vehiclesWaiting = state.vehicles.filter((vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit").length;
     const avgStayDuration =
@@ -1203,7 +1212,7 @@ export const localDb = {
       totalVehicles,
       availableSpots,
       occupancyRate: Math.round(((usableSpots - availableSpots) / usableSpots) * 100),
-      todayRevenue: completedTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+      todayRevenue: todayCompletedTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
       avgStayDuration,
       activeAttendants,
       vehiclesWaiting,
