@@ -33,6 +33,7 @@ import {
 } from "@/hooks/useValetData";
 import { useCan } from "@/contexts/AuthContext";
 import { formatCurrencyBRL, formatDurationMinutes, formatTimeBR } from "@/lib/format";
+import { getRevenueCategory } from "@/lib/transactions";
 import type { Vehicle } from "@/types/valet";
 
 export default function Dashboard() {
@@ -70,24 +71,21 @@ export default function Dashboard() {
   });
   const revenueBreakdown = {
     monthly: todayCompletedTransactions
-      .filter((transaction) => transaction.receiptNumber.startsWith("CLI-"))
+      .filter((transaction) => {
+        const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+        return getRevenueCategory(transaction, vehicle) === "monthly";
+      })
       .reduce((acc, transaction) => acc + transaction.amount, 0),
     agreement: todayCompletedTransactions
       .filter((transaction) => {
-        if (transaction.receiptNumber.startsWith("AGR-")) {
-          return true;
-        }
-        if (transaction.receiptNumber.startsWith("CLI-")) {
-          return false;
-        }
         const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
-        return vehicle?.recurringClientCategory === "agreement";
+        return getRevenueCategory(transaction, vehicle) === "agreement";
       })
       .reduce((acc, transaction) => acc + transaction.amount, 0),
     avulso: todayCompletedTransactions
       .filter((transaction) => {
         const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
-        return !transaction.receiptNumber.startsWith("CLI-") && !transaction.receiptNumber.startsWith("AGR-") && vehicle?.recurringClientCategory !== "agreement";
+        return getRevenueCategory(transaction, vehicle) === "avulso";
       })
       .reduce((acc, transaction) => acc + transaction.amount, 0),
   };

@@ -25,11 +25,12 @@ import {
   calculateAgreementClientFee,
   calculateMonthlyClientFee,
 } from "@/config/pricing";
-import { useCreateClientMutation } from "@/hooks/useValetData";
+import { useCreateClientMutation, useParkingSpotsQuery } from "@/hooks/useValetData";
 import { useAppSettings } from "@/lib/app-settings";
 import { formatCurrencyBRL, formatDateTimeBR } from "@/lib/format";
+import { formatCnpj, formatCpf, formatPhoneBR, isValidPlate, normalizePlate } from "@/lib/masks";
 
-const plateRegex = /^(?:[A-Z]{3}-\d{4}|[A-Z]{3}\d[A-Z]\d{2})$/;
+const CPF_REGEX = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
 
 const schema = z
   .object({
@@ -61,7 +62,7 @@ const schema = z
       .filter(Boolean) as string[];
 
     vehicles.forEach((vehicle, index) => {
-      if (!plateRegex.test(vehicle)) {
+      if (!isValidPlate(vehicle)) {
         ctx.addIssue({
           code: "custom",
           path: [`vehicle${index + 1}`],
@@ -76,6 +77,14 @@ const schema = z
         code: "custom",
         path: ["vehicle1"],
         message: `A placa ${duplicated} foi repetida`,
+      });
+    }
+
+    if (data.category === "monthly" && data.cpf && !CPF_REGEX.test(data.cpf)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cpf"],
+        message: "CPF invalido. Use o formato 000.000.000-00",
       });
     }
 
@@ -109,30 +118,6 @@ type FormValues = z.infer<typeof schema>;
 interface ClientCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function formatPhoneInput(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  if (digits.length <= 2) return digits.length ? `(${digits}` : "";
-  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-}
-
-function formatCnpj(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 14);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
-  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
-  if (digits.length <= 12) {
-    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
-  }
-  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
-}
-
-function normalizePlate(value: string) {
-  const raw = value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-  const standard = `${raw.slice(0, 3)}-${raw.slice(3, 7)}`.replace(/-$/, "");
-  return raw.length >= 7 && /\d/.test(raw.slice(3, 4)) && /[A-Z]/.test(raw.slice(4, 5)) ? raw.slice(0, 7) : standard;
 }
 
 function addMonths(date: Date, months: number) {
@@ -179,6 +164,7 @@ function CounterField({
 
 export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogProps) {
   const createClient = useCreateClientMutation();
+  const { data: parkingSpots = [] } = useParkingSpotsQuery();
   const settings = useAppSettings();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const form = useForm<FormValues>({
@@ -212,6 +198,8 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
   const isVip = form.watch("isVip");
   const includedSpots = Math.max(1, Number(form.watch("includedSpots") ?? 1));
   const vipSpots = Math.max(0, Number(form.watch("vipSpots") ?? 0));
+  const totalSpotCapacity = parkingSpots.length;
+  const vipSpotCapacity = parkingSpots.filter((spot) => spot.type === "vip").length;
   const fee = useMemo(
     () =>
       category === "monthly"
@@ -227,6 +215,18 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
 
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
+    if (category === "agreement" && totalSpotCapacity === 0) {
+      setSubmitError("Cadastre as vagas do patio antes de criar um credenciado.");
+      return;
+    }
+    if (category === "agreement" && includedSpots > Math.max(1, totalSpotCapacity)) {
+      setSubmitError(`O patio possui ${totalSpotCapacity} vagas cadastradas no total.`);
+      return;
+    }
+    if (category === "agreement" && vipSpots > vipSpotCapacity) {
+      setSubmitError(`O patio possui ${vipSpotCapacity} vagas VIP cadastradas.`);
+      return;
+    }
     try {
       const vehicles = vehicleFields
         .map((field) => values[field as keyof FormValues] as string | undefined)
@@ -310,7 +310,7 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
                 placeholder="(19) 99999-9999"
                 inputMode="numeric"
                 value={form.watch("phone")}
-                onChange={(event) => form.setValue("phone", formatPhoneInput(event.target.value), { shouldValidate: true })}
+                onChange={(event) => form.setValue("phone", formatPhoneBR(event.target.value), { shouldValidate: true })}
               />
             </div>
 
@@ -327,7 +327,12 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
             ) : (
               <div className="space-y-2">
                 <Label>CPF</Label>
-                <Input placeholder="Opcional" {...form.register("cpf")} />
+                <Input
+                  placeholder="000.000.000-00"
+                  inputMode="numeric"
+                  value={form.watch("cpf") ?? ""}
+                  onChange={(event) => form.setValue("cpf", formatCpf(event.target.value), { shouldValidate: true })}
+                />
               </div>
             )}
           </div>
@@ -346,14 +351,15 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
                 label="Quantidade de vagas"
                 value={includedSpots}
                 min={1}
-                onChange={(value) => form.setValue("includedSpots", value, { shouldValidate: true })}
+                max={Math.max(1, totalSpotCapacity)}
+                onChange={(value) => form.setValue("includedSpots", Math.min(value, Math.max(1, totalSpotCapacity)), { shouldValidate: true })}
               />
               <CounterField
                 label="Quantidade de vagas VIP"
                 value={vipSpots}
                 min={0}
-                max={includedSpots}
-                onChange={(value) => form.setValue("vipSpots", value, { shouldValidate: true })}
+                max={Math.min(includedSpots, vipSpotCapacity)}
+                onChange={(value) => form.setValue("vipSpots", Math.min(value, Math.min(includedSpots, vipSpotCapacity)), { shouldValidate: true })}
               />
             </div>
           ) : (
@@ -379,6 +385,9 @@ export function ClientCreateDialog({ open, onOpenChange }: ClientCreateDialogPro
               <p className="text-sm font-medium text-foreground">VIP para credenciado</p>
               <p className="text-sm text-muted-foreground">
                 O valor das vagas VIP ja e calculado automaticamente com acrescimo configurado. Vaga comum: {formatCurrencyBRL(settings.agreementStandardSpotRate)}. Vaga VIP: {formatCurrencyBRL(settings.agreementStandardSpotRate * settings.agreementVipMultiplier)}.
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Limite atual do patio: {totalSpotCapacity} vagas no total, sendo {vipSpotCapacity} VIP.
               </p>
             </div>
           ) : null}

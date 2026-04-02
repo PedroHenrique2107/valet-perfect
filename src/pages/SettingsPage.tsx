@@ -169,8 +169,8 @@ export default function SettingsPage() {
     toast({
       title: "Usuario criado",
       description: invite.sendInviteEmail
-        ? "A conta local foi criada no mockDB e marcada como pendente de convite."
-        : "A conta local foi criada no mockDB e vinculada a unidade.",
+        ? "A conta local foi criada e marcada como pendente de convite."
+        : "A conta local foi criada e vinculada a unidade.",
     });
   };
 
@@ -180,12 +180,12 @@ export default function SettingsPage() {
     await refreshUser();
     toast({
       title: "Perfil atualizado",
-      description: "Seu cadastro local foi salvo no mockDB.",
+      description: "Seu cadastro local foi salvo com sucesso.",
     });
   };
 
   const purgeNow = async () => {
-    const confirmed = window.confirm("Excluir os dados operacionais marcados da unidade atual no mockDB?");
+    const confirmed = window.confirm("Excluir os dados operacionais marcados da unidade atual?");
     if (!confirmed) return;
     await purgeUnitData.mutateAsync(purgeConfig);
     toast({ title: "Limpeza concluida", description: "Os dados selecionados foram removidos da unidade." });
@@ -420,7 +420,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><UserCog className="h-5 w-5 text-primary" />Usuarios por unidade</CardTitle>
-                <CardDescription>As contas agora sao criadas localmente no mockDB para voce finalizar o fluxo sem banco real.</CardDescription>
+                <CardDescription>As contas sao criadas localmente, sem dados pre-carregados, para voce montar a operacao real.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-2">
@@ -530,7 +530,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Trash2 className="h-5 w-5 text-destructive" />Limpeza total</CardTitle>
-                <CardDescription>Exclui de uma vez clientes, manobristas e veiculos da unidade atual no mockDB.</CardDescription>
+                <CardDescription>Exclui de uma vez clientes, manobristas e veiculos da unidade atual.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between rounded-xl border border-border/50 p-3"><span className="text-sm">Excluir clientes</span><Switch checked={purgeConfig.deleteClients} onCheckedChange={(checked) => setPurgeConfig((current) => ({ ...current, deleteClients: checked }))} /></div>

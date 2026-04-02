@@ -1,16 +1,17 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { hasPermission } from "@/auth/permissions";
-import { mockDb, type MockSession } from "@/data/mockDb";
+import { localDb, type LocalSession } from "@/data/localDb";
 import type { Permission, SessionUser, UserRole } from "@/types/auth";
 
 interface AuthContextValue {
   user: SessionUser | null;
-  session: MockSession | null;
+  session: LocalSession | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  resetMockDb: () => Promise<void>;
+  hasUsers: boolean;
+  registerFirstUser: (input: { name: string; email: string; password: string; phone?: string }) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ message: string }>;
   updatePassword: (password: string) => Promise<void>;
   can: (permission: Permission) => boolean;
@@ -27,15 +28,16 @@ const ROLE_NAMES: Record<UserRole, string> = {
 
 function snapshotAuth() {
   return {
-    session: mockDb.getSession(),
-    user: mockDb.getCurrentUser(),
+    session: localDb.getSession(),
+    user: localDb.getCurrentUser(),
   };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<MockSession | null>(null);
+  const [session, setSession] = useState<LocalSession | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasUsers, setHasUsers] = useState(false);
 
   const refreshUser = async () => {
     const next = snapshotAuth();
@@ -48,11 +50,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const next = snapshotAuth();
       setSession(next.session);
       setUser(next.user);
+      setHasUsers(localDb.hasUsers());
       setLoading(false);
     };
 
     sync();
-    return mockDb.subscribe(sync);
+    return localDb.subscribe(sync);
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -63,28 +66,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn: async (email, password) => {
         setLoading(true);
         try {
-          await mockDb.signIn(email, password);
+          await localDb.signIn(email, password);
           await refreshUser();
         } finally {
           setLoading(false);
         }
       },
       signOut: async () => {
-        await mockDb.signOut();
+        await localDb.signOut();
         await refreshUser();
       },
       refreshUser,
-      resetMockDb: async () => {
-        mockDb.reset();
-        await refreshUser();
+      hasUsers,
+      registerFirstUser: async (input) => {
+        setLoading(true);
+        try {
+          await localDb.registerFirstUser(input);
+          await refreshUser();
+        } finally {
+          setLoading(false);
+        }
       },
-      requestPasswordReset: async (email) => mockDb.requestPasswordReset(email),
+      requestPasswordReset: async (email) => localDb.requestPasswordReset(email),
       updatePassword: async (password) => {
-        await mockDb.updatePassword(password);
+        await localDb.updatePassword(password);
       },
       can: (permission) => (user?.role ? hasPermission(user.role, permission) : false),
     }),
-    [loading, session, user],
+    [hasUsers, loading, session, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

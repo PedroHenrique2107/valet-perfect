@@ -28,10 +28,8 @@ import { useAppSettings } from "@/lib/app-settings";
 import { findParkingSpotByIdentifier } from "@/lib/parking-spots";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrencyBRL } from "@/lib/format";
+import { formatPhoneBR, isValidPlate, normalizePlate, normalizePlateLookup } from "@/lib/masks";
 import type { Client, ContractType } from "@/types/valet";
-
-const standardPlateRegex = /^[A-Z]{3}-\d{4}$/;
-const mercosulPlateRegex = /^[A-Z]{3}\d[A-Z]\d{2}$/;
 
 const inspectionKeys = [
   "leftSide",
@@ -80,9 +78,7 @@ const schema = z
     interior: z.boolean(),
   })
   .superRefine((data, ctx) => {
-    const validPlate = mercosulPlateRegex.test(data.plate) || standardPlateRegex.test(data.plate);
-
-    if (!validPlate) {
+    if (!isValidPlate(data.plate)) {
       ctx.addIssue({
         code: "custom",
         path: ["plate"],
@@ -107,61 +103,6 @@ type FormValues = z.infer<typeof schema>;
 interface VehicleEntryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function autoFormatPlate(value: string) {
-  const raw = value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-  const looksLikeMercosul =
-    raw.length >= 5 && /[A-Z]{3}/.test(raw.slice(0, 3)) && /\d/.test(raw.slice(3, 4)) && /[A-Z]/.test(raw.slice(4, 5));
-
-  if (!looksLikeMercosul) {
-    const letters = raw.replace(/\d/g, "").slice(0, 3);
-    const numbers = raw.replace(/\D/g, "").slice(0, 4);
-    return {
-      formatted: numbers.length > 0 ? `${letters}-${numbers}` : letters,
-      isMercosul: false,
-    };
-  }
-
-  const pattern: Array<"L" | "N"> = ["L", "L", "L", "N", "L", "N", "N"];
-
-  let result = "";
-  let rawIndex = 0;
-
-  for (const item of pattern) {
-    while (rawIndex < raw.length) {
-      const char = raw[rawIndex];
-      rawIndex += 1;
-      if (item === "L" && /[A-Z]/.test(char)) {
-        result += char;
-        break;
-      }
-      if (item === "N" && /\d/.test(char)) {
-        result += char;
-        break;
-      }
-    }
-  }
-
-  return {
-    formatted: result,
-    isMercosul: true,
-  };
-}
-
-function formatPhone(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  const ddd = digits.slice(0, 2);
-  const firstPart = digits.slice(2, 7);
-  const secondPart = digits.slice(7, 11);
-
-  if (digits.length <= 2) return digits.length > 0 ? `(${ddd}` : "";
-  if (digits.length <= 7) return `(${ddd}) ${firstPart}`;
-  return `(${ddd}) ${firstPart}-${secondPart}`;
-}
-
-function normalizePlateLookup(value: string) {
-  return value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
 }
 
 function findClientByPlate(clients: Client[], plate: string) {
@@ -323,12 +264,12 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
 
       if (createdVehicle.linkedClientId) {
         toast({
-          title: createdVehicle.billingStatusAtEntry === "current" ? "Mensalidade em dia" : "Mensalidade vencida",
+          title: "Cliente recorrente reconhecido",
           description:
-            createdVehicle.billingStatusAtEntry === "current"
-              ? `${createdVehicle.plate} reconhecido. A saida sera isenta.`
-              : `${createdVehicle.plate} reconhecido, mas a mensalidade esta vencida. A saida sera cobrada como avulso.`,
-          variant: createdVehicle.billingStatusAtEntry === "current" ? "default" : "destructive",
+            createdVehicle.recurringClientCategory === "monthly"
+              ? `${createdVehicle.plate} reconhecido como mensalista. A saida sera isenta.`
+              : `${createdVehicle.plate} reconhecido como credenciado. A saida sera isenta.`,
+          variant: "default",
         });
       }
 
@@ -367,8 +308,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                   placeholder="ABC-1234 ou ABC1D23"
                   value={plate}
                   onChange={(event) => {
-                    const nextPlate = autoFormatPlate(event.target.value);
-                    form.setValue("plate", nextPlate.formatted, { shouldValidate: true });
+                    form.setValue("plate", normalizePlate(event.target.value), { shouldValidate: true });
                   }}
                 />
               </div>
@@ -414,7 +354,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                   placeholder="(19) 99999-9999"
                   value={phone}
                   readOnly={Boolean(matchedClient)}
-                  onChange={(event) => form.setValue("clientPhone", formatPhone(event.target.value), { shouldValidate: true })}
+                  onChange={(event) => form.setValue("clientPhone", formatPhoneBR(event.target.value), { shouldValidate: true })}
                 />
               </div>
             </div>
@@ -426,9 +366,7 @@ export function VehicleEntryDialog({ open, onOpenChange }: VehicleEntryDialogPro
                   {matchedClient.isVip ? " VIP" : ""}.
                 </p>
                 <p className="text-muted-foreground">
-                  {matchedClientOverdue
-                    ? "Mensalidade vencida. A entrada e permitida, mas a saida sera cobrada como avulso."
-                    : "Mensalidade em dia. A saida sera isenta de cobranca."}
+                  A saida sera isenta de cobranca por ser um cliente recorrente cadastrado.
                 </p>
                 {matchedDriverName ? <p className="text-muted-foreground">Condutor vinculado: {matchedDriverName}</p> : null}
                 {matchedVehicleModel ? <p className="text-muted-foreground">Modelo vinculado: {matchedVehicleModel}</p> : null}

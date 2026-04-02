@@ -72,22 +72,23 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
   const selectedVehicle = activeVehicles.find((vehicle) => vehicle.id === form.watch("vehicleId"));
   const durationSeconds = selectedVehicle ? Math.max(1, Math.floor((now - selectedVehicle.entryTime.getTime()) / 1000)) : 0;
   const durationMinutes = Math.max(1, Math.ceil(durationSeconds / 60));
-  const recurringCurrent = selectedVehicle?.linkedClientId && selectedVehicle.billingStatusAtEntry === "current";
-  const recurringOverdue = selectedVehicle?.linkedClientId && selectedVehicle.billingStatusAtEntry === "overdue";
+  const recurringExempt = Boolean(
+    selectedVehicle?.linkedClientId &&
+      (selectedVehicle.recurringClientCategory === "monthly" || selectedVehicle.recurringClientCategory === "agreement"),
+  );
 
   const pricing = useMemo(() => {
     if (!selectedVehicle) return { gross: 0, discount: 0, net: 0 };
-    if (selectedVehicle.prepaidPaid || recurringCurrent) return { gross: 0, discount: 0, net: 0 };
-    if (recurringOverdue) return calculateAmountByDuration(durationMinutes, "none");
+    if (selectedVehicle.prepaidPaid || recurringExempt) return { gross: 0, discount: 0, net: 0 };
     return calculateAmountByDuration(durationMinutes, form.watch("agreementId"));
-  }, [durationMinutes, form, recurringCurrent, recurringOverdue, selectedVehicle]);
+  }, [durationMinutes, form, recurringExempt, selectedVehicle]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
     try {
       await registerExit.mutateAsync({
         vehicleId: values.vehicleId,
-        paymentMethod: recurringCurrent ? "monthly" : values.paymentMethod,
+        paymentMethod: recurringExempt ? "monthly" : values.paymentMethod,
         amount: pricing.net,
       });
       form.reset({ vehicleId: initialVehicleId ?? "", paymentMethod: "pix", agreementId: "none" });
@@ -139,14 +140,14 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
               <p><strong>Tempo registrado:</strong> {formatDurationPrecise(durationSeconds)}</p>
               {selectedVehicle.linkedClientId ? (
                 <p>
-                  <strong>Status da mensalidade:</strong>{" "}
-                  {selectedVehicle.billingStatusAtEntry === "current" ? "Em dia" : "Vencida"}
+                  <strong>Tipo do cliente:</strong>{" "}
+                  {selectedVehicle.recurringClientCategory === "monthly" ? "Mensalista" : selectedVehicle.recurringClientCategory === "agreement" ? "Credenciado" : "Avulso"}
                 </p>
               ) : null}
             </div>
           )}
 
-          {!recurringCurrent && !recurringOverdue && (
+          {!recurringExempt && !selectedVehicle?.prepaidPaid && (
             <Select
               value={form.watch("agreementId")}
               onValueChange={(value) => form.setValue("agreementId", value, { shouldValidate: true })}
@@ -164,7 +165,7 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
             </Select>
           )}
 
-          {!recurringCurrent && (
+          {!recurringExempt && !selectedVehicle?.prepaidPaid && (
             <Select
               value={form.watch("paymentMethod")}
               onValueChange={(value) => form.setValue("paymentMethod", value as FormValues["paymentMethod"], { shouldValidate: true })}
@@ -185,13 +186,9 @@ export function VehicleExitDialog({ open, onOpenChange, initialVehicleId }: Vehi
             <div className="rounded-md border border-success/40 bg-success/5 p-3 text-xs">
               <p><strong>Diaria antecipada:</strong> a saida precisa permanecer zerada.</p>
             </div>
-          ) : recurringCurrent ? (
+          ) : recurringExempt ? (
             <div className="rounded-md border border-success/40 bg-success/5 p-3 text-xs">
-              <p><strong>Saida isenta:</strong> este veiculo esta com a mensalidade em dia.</p>
-            </div>
-          ) : recurringOverdue ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs">
-              <p><strong>Mensalidade vencida:</strong> a cobranca sera feita como avulso.</p>
+              <p><strong>Saida isenta:</strong> este veiculo pertence a um cliente recorrente cadastrado.</p>
             </div>
           ) : null}
 

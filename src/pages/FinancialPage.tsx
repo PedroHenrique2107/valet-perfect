@@ -43,11 +43,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  useClientsQuery,
   useDashboardStatsQuery,
   useTransactionsQuery,
   useVehiclesQuery,
 } from "@/hooks/useValetData";
 import { formatCurrencyBRL, formatDateTimeBR, formatDurationMinutes } from "@/lib/format";
+import { getRevenueCategory, getTransactionSourceLabel, resolveTransactionClientName } from "@/lib/transactions";
 import type { PaymentMethod, PaymentStatus, RevenueData, Transaction, Vehicle } from "@/types/valet";
 
 type PeriodPreset = "today" | "7d" | "1m" | "6m" | "1y" | "custom";
@@ -102,30 +104,6 @@ const paymentStatusConfig: Record<PaymentStatus, { label: string; className: str
   failed: { label: "Falhou", className: "status-occupied" },
   refunded: { label: "Estornado", className: "bg-muted text-muted-foreground" },
 };
-
-function isMonthlyFeeTransaction(transaction: Transaction) {
-  return transaction.receiptNumber.startsWith("CLI-");
-}
-
-function isAgreementChargeTransaction(transaction: Transaction) {
-  return transaction.receiptNumber.startsWith("AGR-");
-}
-
-function getRevenueCategory(transaction: Transaction, vehicle?: Vehicle) {
-  if (isAgreementChargeTransaction(transaction)) {
-    return "agreement" as const;
-  }
-
-  if (isMonthlyFeeTransaction(transaction)) {
-    return "monthly" as const;
-  }
-
-  if (vehicle?.recurringClientCategory === "agreement") {
-    return "agreement" as const;
-  }
-
-  return "avulso" as const;
-}
 
 function getResolvedRange(period: PeriodPreset, customRange?: DateRange) {
   const now = new Date();
@@ -377,6 +355,7 @@ export default function FinancialPage() {
   const { data: dashboardStats } = useDashboardStatsQuery();
   const { data: transactions = [] } = useTransactionsQuery();
   const { data: vehicles = [] } = useVehiclesQuery();
+  const { data: clients = [] } = useClientsQuery();
 
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodPreset>("7d");
   const [periodPopoverOpen, setPeriodPopoverOpen] = useState(false);
@@ -1026,6 +1005,7 @@ export default function FinancialPage() {
                 <thead>
                   <tr>
                     <th>Veiculo</th>
+                    <th>Origem</th>
                     <th>Recibo</th>
                     <th>Valor</th>
                     <th>Pagamento</th>
@@ -1038,11 +1018,12 @@ export default function FinancialPage() {
                   {filteredTransactions.map((transaction) => {
                     const status = paymentStatusConfig[transaction.status];
                     const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+                    const clientName = resolveTransactionClientName(transaction, vehicle, clients);
 
                     return (
                       <tr key={transaction.id}>
                         <td>
-                          {vehicle ? (
+                          {vehicle?.plate ? (
                             <button
                               type="button"
                               className="text-left text-sm font-medium text-primary hover:underline"
@@ -1055,8 +1036,16 @@ export default function FinancialPage() {
                               {vehicle.plate}
                             </button>
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <div>
+                              <span className="text-muted-foreground">Sem placa</span>
+                              {clientName ? <p className="text-xs text-muted-foreground">{clientName}</p> : null}
+                            </div>
                           )}
+                        </td>
+                        <td>
+                          <span className="text-sm text-muted-foreground">
+                            {getTransactionSourceLabel(transaction, vehicle, clients)}
+                          </span>
                         </td>
                         <td>
                           <span className="font-mono text-sm">{transaction.receiptNumber}</span>

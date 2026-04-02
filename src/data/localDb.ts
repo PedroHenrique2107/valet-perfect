@@ -37,13 +37,13 @@ import type {
   UpdateVehicleSpotInput,
 } from "@/services/valet.types";
 
-export interface MockSession {
+export interface LocalSession {
   userId: string;
   token: string;
   expiresAt: string;
 }
 
-interface MockUserRecord extends SessionUser {
+interface LocalUserRecord extends SessionUser {
   password: string;
   status: "active" | "invited";
   workPeriodStart?: string;
@@ -52,9 +52,9 @@ interface MockUserRecord extends SessionUser {
   createdAt: string;
 }
 
-interface MockDbState {
-  users: MockUserRecord[];
-  session: MockSession | null;
+interface LocalDbState {
+  users: LocalUserRecord[];
+  session: LocalSession | null;
   units: Unit[];
   unitMembers: UnitMember[];
   unitInvitations: UnitInvitation[];
@@ -67,9 +67,9 @@ interface MockDbState {
   activities: Activity[];
 }
 
-const STORAGE_KEY = "valet-perfect-mock-db";
-const STORAGE_VERSION_KEY = "valet-perfect-mock-db-version";
-const SEED_VERSION = "2026-03-21-login-sync-v1";
+const STORAGE_KEY = "valet-perfect-local-db";
+const STORAGE_VERSION_KEY = "valet-perfect-local-db-version";
+const STORAGE_VERSION = "2026-04-01-empty-state-v1";
 const listeners = new Set<() => void>();
 
 function createId(prefix: string) {
@@ -80,19 +80,11 @@ function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function minutesAgo(minutes: number) {
-  return new Date(Date.now() - minutes * 60_000);
-}
-
-function daysAgo(days: number) {
-  return new Date(Date.now() - days * 24 * 60 * 60_000);
-}
-
 function deepClone<T>(value: T): T {
   return structuredClone(value);
 }
 
-function serializeState(state: MockDbState) {
+function serializeState(state: LocalDbState) {
   return JSON.stringify(state);
 }
 
@@ -101,7 +93,7 @@ function parseDate(value: Date | string | undefined): Date | undefined {
   return value instanceof Date ? value : new Date(value);
 }
 
-function hydrateState(raw: MockDbState): MockDbState {
+function hydrateState(raw: LocalDbState): LocalDbState {
   return {
     ...raw,
     units: raw.units.map((unit) => ({ ...unit, createdAt: new Date(unit.createdAt) })),
@@ -162,10 +154,10 @@ function hydrateState(raw: MockDbState): MockDbState {
   };
 }
 
-function persistState(state: MockDbState) {
+function persistState(state: LocalDbState) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, serializeState(state));
-  window.localStorage.setItem(STORAGE_VERSION_KEY, SEED_VERSION);
+  window.localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
 }
 
 function notify() {
@@ -178,340 +170,159 @@ function shiftFromRole(role: UserRole): Attendant["shift"] {
   return "night";
 }
 
-function roleToAttendantStatus(role: UserRole): Attendant["status"] {
-  if (role === "leader") return "commuting";
-  return "online";
-}
-
-function seedState(): MockDbState {
-  const unitId = "unit-matriz";
-  const adminId = "user-admin";
-  const leaderId = "user-leader";
-  const attendantId = "user-attendant";
-  const cashierId = "user-cashier";
-  const openCashId = "cash-open-001";
-
-  const users: MockUserRecord[] = [
-    {
-      id: adminId,
-      email: "admin@valettracker.com",
-      name: "Pedro",
-      role: "admin",
-      unitId,
-      phone: "(19) 99713-4358",
-      avatarUrl: null,
-      password: "123456",
-      status: "active",
-      createdAt: daysAgo(30).toISOString(),
-    },
-    {
-      id: leaderId,
-      email: "lider@valettracker.com",
-      name: "Camila Lider",
-      role: "leader",
-      unitId,
-      phone: "(11) 99999-0002",
-      avatarUrl: null,
-      password: "123456",
-      status: "active",
-      workPeriodStart: "07:00",
-      workPeriodEnd: "16:00",
-      maxWorkHours: 8,
-      createdAt: daysAgo(20).toISOString(),
-    },
-    {
-      id: attendantId,
-      email: "manobrista@valettracker.com",
-      name: "Rafael Manobrista",
-      role: "attendant",
-      unitId,
-      phone: "(11) 99999-0003",
-      avatarUrl: null,
-      password: "123456",
-      status: "active",
-      workPeriodStart: "08:00",
-      workPeriodEnd: "17:00",
-      maxWorkHours: 8,
-      createdAt: daysAgo(18).toISOString(),
-    },
-    {
-      id: cashierId,
-      email: "caixa@valettracker.com",
-      name: "Bruna Caixa",
-      role: "cashier",
-      unitId,
-      phone: "(11) 99999-0004",
-      avatarUrl: null,
-      password: "123456",
-      status: "active",
-      workPeriodStart: "09:00",
-      workPeriodEnd: "18:00",
-      maxWorkHours: 8,
-      createdAt: daysAgo(16).toISOString(),
-    },
-  ];
-
-  const units: Unit[] = [
-    {
-      id: unitId,
-      name: "Valet Perfect Matriz",
-      location: "Sao Paulo - SP",
-      createdAt: daysAgo(120),
-    },
-  ];
-
-  const unitMembers: UnitMember[] = users.map((user) => ({
-    userId: user.id,
-    unitId,
-    role: user.role ?? "attendant",
-    fullName: user.name,
-    email: user.email,
-    phone: user.phone ?? undefined,
-    unitName: units[0].name,
-    unitLocation: units[0].location,
-    createdAt: new Date(user.createdAt),
-  }));
-
-  const attendants: Attendant[] = users
-    .filter((user) => user.role && user.role !== "admin")
-    .map((user, index) => ({
-      id: user.id,
-      name: user.name,
-      photo: "",
-      status: roleToAttendantStatus(user.role as UserRole),
-      phone: user.phone ?? "",
-      vehiclesHandled: 60 - index * 8,
-      vehiclesHandledToday: 5 - index,
-      avgServiceTime: 240 + index * 40,
-      rating: 4.6 - index * 0.1,
-      currentVehicleId: index === 1 ? "stay-001" : undefined,
-      shift: shiftFromRole(user.role as UserRole),
-      isOnline: true,
-      parkingId: unitId,
-      parkingName: units[0].name,
-      workPeriodStart: user.workPeriodStart ?? "08:00",
-      workPeriodEnd: user.workPeriodEnd ?? "17:00",
-      maxWorkHours: user.maxWorkHours ?? 8,
-      startedAt: minutesAgo(240 + index * 20),
-      accumulatedWorkMinutes: 240 + index * 20,
-    }));
-
-  const parkingSpots: ParkingSpot[] = [
-    { id: "spot-a01", code: "A01", floor: 1, section: "A", type: "regular", status: "occupied", sortOrder: 1, vehicleId: "stay-001" },
-    { id: "spot-a02", code: "A02", floor: 1, section: "A", type: "vip", status: "occupied", sortOrder: 2, vehicleId: "stay-002" },
-    { id: "spot-a03", code: "A03", floor: 1, section: "A", type: "regular", status: "available", sortOrder: 3 },
-    { id: "spot-b01", code: "B01", floor: 1, section: "B", type: "accessible", status: "available", sortOrder: 4 },
-    { id: "spot-b02", code: "B02", floor: 1, section: "B", type: "electric", status: "maintenance", sortOrder: 5, observations: "Tomada em revisao" },
-    { id: "spot-c01", code: "C01", floor: 2, section: "C", type: "regular", status: "available", sortOrder: 1 },
-    { id: "spot-c02", code: "C02", floor: 2, section: "C", type: "motorcycle", status: "blocked", sortOrder: 2, observations: "Reservada para evento" },
-    { id: "spot-d01", code: "D01", floor: 2, section: "D", type: "regular", status: "available", sortOrder: 3 },
-  ];
-
-  const clients: Client[] = [
-    {
-      id: "client-001",
-      name: "Hotel Centro",
-      email: "contato@hotelcentro.com",
-      phone: "(11) 4000-1000",
-      cnpj: "12.345.678/0001-90",
-      vehicles: ["ABC1D23", "BRA2E45"],
-      vehicleDrivers: { ABC1D23: "Carlos", BRA2E45: "Marina" },
-      vehicleModels: { ABC1D23: "Toyota Corolla", BRA2E45: "Jeep Compass" },
-      category: "agreement",
-      isVip: true,
-      includedSpots: 3,
-      vipSpots: 1,
-      monthlyFee: 2400,
-      billingDueDay: 10,
-      billingDueDate: new Date("2026-03-10T00:00:00"),
-      totalVisits: 48,
-      totalSpent: 9100,
-      cashback: 0,
-      createdAt: daysAgo(90),
-    },
-    {
-      id: "client-002",
-      name: "Lucas Mendes",
-      email: "lucas@cliente.com",
-      phone: "(11) 98888-7777",
-      cpf: "123.456.789-00",
-      vehicles: ["QWE4R56"],
-      vehicleDrivers: { QWE4R56: "Lucas Mendes" },
-      vehicleModels: { QWE4R56: "Honda Civic" },
-      category: "monthly",
-      isVip: false,
-      includedSpots: 1,
-      vipSpots: 0,
-      monthlyFee: 780,
-      billingDueDay: 5,
-      billingDueDate: new Date("2026-03-05T00:00:00"),
-      totalVisits: 22,
-      totalSpent: 3900,
-      cashback: 120,
-      createdAt: daysAgo(65),
-    },
-  ];
-
-  const vehicles: Vehicle[] = [
-    {
-      id: "stay-001",
-      plate: "ABC1D23",
-      brand: "Toyota",
-      model: "Corolla",
-      color: "Prata",
-      year: 2023,
-      status: "parked",
-      entryTime: minutesAgo(145),
-      spotId: "spot-a01",
-      attendantId,
-      clientName: "Hotel Centro",
-      driverName: "Carlos",
-      clientPhone: "(11) 4000-1000",
-      observations: "Cliente VIP",
-      contractType: "agreement",
-      unitName: units[0].name,
-      linkedClientId: "client-001",
-      recurringClientCategory: "agreement",
-      billingStatusAtEntry: "current",
-      vipRequired: true,
-      entryCashSessionId: openCashId,
-      spotHistory: [{ spotId: "spot-a01", changedAt: minutesAgo(145), changedBy: "Rafael Manobrista" }],
-    },
-    {
-      id: "stay-002",
-      plate: "QWE4R56",
-      brand: "Honda",
-      model: "Civic",
-      color: "Preto",
-      year: 2022,
-      status: "requested",
-      entryTime: minutesAgo(320),
-      requestedAt: minutesAgo(12),
-      spotId: "spot-a02",
-      attendantId: leaderId,
-      clientName: "Lucas Mendes",
-      driverName: "Lucas Mendes",
-      clientPhone: "(11) 98888-7777",
-      contractType: "monthly",
-      unitName: units[0].name,
-      linkedClientId: "client-002",
-      recurringClientCategory: "monthly",
-      billingStatusAtEntry: "current",
-      entryCashSessionId: openCashId,
-      spotHistory: [{ spotId: "spot-a02", changedAt: minutesAgo(320), changedBy: "Camila Lider" }],
-    },
-  ];
-
-  const transactions: Transaction[] = [
-    {
-      id: "txn-001",
-      vehicleId: "stay-001",
-      amount: 48,
-      paymentMethod: "pix",
-      status: "completed",
-      createdAt: minutesAgo(30),
-      completedAt: minutesAgo(28),
-      receiptNumber: "REC-1001",
-      duration: 145,
-      cashSessionId: openCashId,
-    },
-  ];
-
-  const cashSessions: CashSession[] = [
-    {
-      id: "cash-closed-001",
-      unitId,
-      attendantId: cashierId,
-      attendantName: "Bruna Caixa",
-      status: "closed",
-      openingAmount: 200,
-      closingAmount: 612,
-      expectedAmount: 600,
-      differenceAmount: 12,
-      totalEntries: 9,
-      totalExits: 8,
-      totalRevenue: 400,
-      totalTransactions: 8,
-      openingNotes: "Troco inicial",
-      closingNotes: "Fechamento sem divergencias relevantes.",
-      openedAt: daysAgo(1),
-      closedAt: new Date(daysAgo(1).getTime() + 8 * 60 * 60_000),
-      report: {
-        entries: [
-          { stayId: "stay-old-1", plate: "AAA0A00", clientName: "Cliente Historico", driverName: "Joao", entryTime: daysAgo(1), spotId: "spot-c01" },
-        ],
-        exits: [
-          { stayId: "stay-old-1", plate: "AAA0A00", clientName: "Cliente Historico", driverName: "Joao", exitTime: new Date(daysAgo(1).getTime() + 2 * 60 * 60_000) },
-        ],
-        transactions: [
-          { transactionId: "txn-old-1", receiptNumber: "REC-0950", paymentMethod: "cash", status: "completed", amount: 35, createdAt: daysAgo(1), completedAt: daysAgo(1) },
-        ],
-        paymentBreakdown: [{ paymentMethod: "cash", amount: 400, count: 8 }],
-      },
-    },
-    {
-      id: openCashId,
-      unitId,
-      attendantId: cashierId,
-      attendantName: "Bruna Caixa",
-      status: "open",
-      openingAmount: 150,
-      expectedAmount: 198,
-      differenceAmount: 0,
-      totalEntries: 2,
-      totalExits: 0,
-      totalRevenue: 48,
-      totalTransactions: 1,
-      openingNotes: "Troco para o turno da manha",
-      openedAt: minutesAgo(190),
-    },
-  ];
-
-  const activities: Activity[] = [
-    { id: "activity-001", type: "entry", title: "Entrada registrada", description: "ABC1D23 entrou pela portaria principal.", time: "2h atras", plate: "ABC1D23" },
-    { id: "activity-002", type: "request", title: "Solicitacao de retirada", description: "QWE4R56 foi solicitado pelo cliente.", time: "12 min atras", plate: "QWE4R56" },
-    { id: "activity-003", type: "payment", title: "Pagamento concluido", description: "Recebimento via PIX confirmado.", time: "28 min atras", plate: "ABC1D23" },
-  ];
-
+function emptyState(): LocalDbState {
   return {
-    users,
-    session: { userId: adminId, token: "mock-session-token", expiresAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString() },
-    units,
-    unitMembers,
+    users: [],
+    session: null,
+    units: [],
+    unitMembers: [],
     unitInvitations: [],
-    attendants,
-    parkingSpots,
-    vehicles,
-    transactions,
-    clients,
-    cashSessions,
-    activities,
+    attendants: [],
+    parkingSpots: [],
+    vehicles: [],
+    transactions: [],
+    clients: [],
+    cashSessions: [],
+    activities: [],
   };
 }
 
-let state: MockDbState = (() => {
+const SEEDED_ATTENDANTS: Array<{
+  id: string;
+  name: string;
+  status: Attendant["status"];
+  shift: Attendant["shift"];
+  isOnline: boolean;
+  phone: string;
+  currentVehicleId?: string;
+  workPeriodStart: string;
+  workPeriodEnd: string;
+  maxWorkHours: number;
+  accumulatedWorkMinutes: number;
+}> = [
+  { id: "seed-attendant-online", name: "Rafael Operacao", status: "online", shift: "morning", isOnline: true, phone: "(11) 98888-1001", currentVehicleId: "seed-vehicle-01", workPeriodStart: "06:00", workPeriodEnd: "14:00", maxWorkHours: 8, accumulatedWorkMinutes: 210 },
+  { id: "seed-attendant-commuting", name: "Camila Patio", status: "commuting", shift: "morning", isOnline: true, phone: "(11) 98888-1002", currentVehicleId: "seed-vehicle-02", workPeriodStart: "07:00", workPeriodEnd: "15:00", maxWorkHours: 8, accumulatedWorkMinutes: 165 },
+  { id: "seed-attendant-lunch", name: "Bruno Agilidade", status: "lunch", shift: "afternoon", isOnline: true, phone: "(11) 98888-1003", workPeriodStart: "10:00", workPeriodEnd: "18:00", maxWorkHours: 8, accumulatedWorkMinutes: 240 },
+  { id: "seed-attendant-dinner", name: "Leandro Recolha", status: "dinner", shift: "night", isOnline: true, phone: "(11) 98888-1004", workPeriodStart: "14:00", workPeriodEnd: "22:00", maxWorkHours: 8, accumulatedWorkMinutes: 275 },
+  { id: "seed-attendant-offline", name: "Marcos Reserva", status: "offline", shift: "night", isOnline: false, phone: "(11) 98888-1005", workPeriodStart: "16:00", workPeriodEnd: "00:00", maxWorkHours: 8, accumulatedWorkMinutes: 0 },
+];
+
+function minutesAgo(minutes: number) {
+  return new Date(Date.now() - minutes * 60_000);
+}
+
+function injectOperationalMocks(base: LocalDbState): LocalDbState {
+  const next = deepClone(base);
+  const unitId = next.units[0]?.id ?? "unit-local";
+  const unitName = next.units[0]?.name ?? "Operacao Local";
+
+  SEEDED_ATTENDANTS.forEach((seed, index) => {
+    if (next.attendants.some((attendant) => attendant.id === seed.id)) {
+      return;
+    }
+
+    next.attendants.push({
+      id: seed.id,
+      name: seed.name,
+      photo: "",
+      status: seed.status,
+      phone: seed.phone,
+      vehiclesHandled: 25 + index * 6,
+      vehiclesHandledToday: 3 + index,
+      avgServiceTime: 180 + index * 20,
+      rating: Math.max(4.2, 4.9 - index * 0.1),
+      currentVehicleId: seed.currentVehicleId,
+      shift: seed.shift,
+      isOnline: seed.isOnline,
+      parkingId: unitId,
+      parkingName: unitName,
+      workPeriodStart: seed.workPeriodStart,
+      workPeriodEnd: seed.workPeriodEnd,
+      maxWorkHours: seed.maxWorkHours,
+      startedAt: seed.isOnline ? minutesAgo(seed.accumulatedWorkMinutes) : undefined,
+      accumulatedWorkMinutes: seed.accumulatedWorkMinutes,
+    });
+  });
+
+  const seededVehicleIds = new Set(next.vehicles.filter((vehicle) => vehicle.id.startsWith("seed-vehicle-")).map((vehicle) => vehicle.id));
+  const remainingSlots = Math.max(0, 8 - seededVehicleIds.size);
+  if (remainingSlots === 0) {
+    return next;
+  }
+
+  const availableSpots = next.parkingSpots.filter((spot) => spot.status === "available").slice(0, remainingSlots);
+  const seedStatuses: Array<Vehicle["status"]> = ["parked", "requested", "in_transit", "parked", "requested", "parked", "in_transit", "parked"];
+
+  availableSpots.forEach((spot, index) => {
+    const vehicleId = `seed-vehicle-${String(index + 1).padStart(2, "0")}`;
+    if (next.vehicles.some((vehicle) => vehicle.id === vehicleId)) {
+      return;
+    }
+
+    const status = seedStatuses[index] ?? "parked";
+    const attendant = next.attendants[index % next.attendants.length];
+    const mercosulPlate = `VPA${(index + 1) % 10}B${String((index + 2) % 100).padStart(2, "0")}`;
+    const fallbackClientName = `Cliente Patio ${index + 1}`;
+
+    next.vehicles.push({
+      id: vehicleId,
+      plate: index % 2 === 0 ? `ABC-${String(1200 + index).padStart(4, "0")}` : mercosulPlate,
+      brand: index % 2 === 0 ? "Toyota" : "Honda",
+      model: index % 2 === 0 ? `Corolla ${index + 1}` : `Civic ${index + 1}`,
+      color: index % 2 === 0 ? "Prata" : "Preto",
+      year: 2022 + (index % 3),
+      status,
+      entryTime: minutesAgo(40 + index * 18),
+      requestedAt: status === "requested" || status === "in_transit" ? minutesAgo(8 + index * 3) : undefined,
+      spotId: spot.id,
+      attendantId: attendant?.id ?? SEEDED_ATTENDANTS[0].id,
+      clientName: fallbackClientName,
+      driverName: `Condutor ${index + 1}`,
+      clientPhone: `(11) 97777-${String(1000 + index).slice(-4)}`,
+      observations: status === "requested" ? "Entrega solicitada." : undefined,
+      contractType: "hourly",
+      unitName,
+      spotHistory: [{ spotId: spot.id, changedAt: minutesAgo(40 + index * 18), changedBy: attendant?.name ?? "Sistema" }],
+    });
+
+    const targetSpot = next.parkingSpots.find((item) => item.id === spot.id);
+    if (targetSpot) {
+      targetSpot.status = "occupied";
+      targetSpot.vehicleId = vehicleId;
+    }
+  });
+
+  return next;
+}
+
+let state: LocalDbState = (() => {
   if (typeof window === "undefined") {
-    return seedState();
+    return injectOperationalMocks(emptyState());
   }
 
   const savedVersion = window.localStorage.getItem(STORAGE_VERSION_KEY);
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw || savedVersion !== SEED_VERSION) {
-    const seeded = seedState();
-    persistState(seeded);
-    return seeded;
+  if (!raw || savedVersion !== STORAGE_VERSION) {
+    const initial = injectOperationalMocks(emptyState());
+    persistState(initial);
+    return initial;
   }
 
   try {
-    return hydrateState(JSON.parse(raw) as MockDbState);
+    const hydrated = hydrateState(JSON.parse(raw) as LocalDbState);
+    const next = injectOperationalMocks(hydrated);
+    if (JSON.stringify(next) !== JSON.stringify(hydrated)) {
+      persistState(next);
+    }
+    return next;
   } catch {
-    const seeded = seedState();
-    persistState(seeded);
-    return seeded;
+    const initial = injectOperationalMocks(emptyState());
+    persistState(initial);
+    return initial;
   }
 })();
 
-function commit(mutator: (draft: MockDbState) => void) {
+function commit(mutator: (draft: LocalDbState) => void) {
   const draft = deepClone(state);
   mutator(draft);
   state = draft;
@@ -533,7 +344,7 @@ function requireCurrentUser() {
   return user;
 }
 
-function updateCashSessionStats(draft: MockDbState) {
+function updateCashSessionStats(draft: LocalDbState) {
   draft.cashSessions = draft.cashSessions.map((session) => {
     const sessionTransactions = draft.transactions.filter((transaction) => transaction.cashSessionId === session.id && transaction.status === "completed");
     const totalRevenue = sessionTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
@@ -565,12 +376,23 @@ function createActivity(type: Activity["type"], title: string, description: stri
   };
 }
 
-function addActivity(draft: MockDbState, activity: Activity) {
+function addActivity(draft: LocalDbState, activity: Activity) {
   draft.activities = [activity, ...draft.activities].slice(0, 30);
 }
 
 function currentOpenCashSession() {
   return state.cashSessions.find((session) => session.status === "open") ?? null;
+}
+
+function normalizePlateLookup(value: string) {
+  return value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+}
+
+function findClientByPlate(plate: string) {
+  const normalized = normalizePlateLookup(plate);
+  return state.clients.find((client) =>
+    client.vehicles.some((registeredPlate) => normalizePlateLookup(registeredPlate) === normalized),
+  );
 }
 
 function summarizeCashReport(sessionId: string) {
@@ -630,23 +452,75 @@ function summarizeCashReport(sessionId: string) {
   };
 }
 
-export const mockDb = {
+export const localDb = {
   subscribe(listener: () => void) {
     listeners.add(listener);
     return () => listeners.delete(listener);
   },
 
   reset() {
-    state = seedState();
+    state = emptyState();
     persistState(state);
     notify();
+  },
+
+  hasUsers() {
+    return state.users.length > 0;
+  },
+
+  async registerFirstUser(input: { name: string; email: string; password: string; phone?: string }) {
+    if (state.users.length > 0) {
+      throw new Error("Ja existe um usuario cadastrado.");
+    }
+
+    const userId = createId("user");
+    const unitId = createId("unit");
+    const user: LocalUserRecord = {
+      id: userId,
+      email: input.email.trim().toLowerCase(),
+      name: input.name.trim(),
+      role: "admin",
+      unitId,
+      phone: input.phone?.trim() || null,
+      avatarUrl: null,
+      password: input.password,
+      status: "active",
+      createdAt: new Date().toISOString(),
+    };
+    const unit: Unit = {
+      id: unitId,
+      name: "Minha unidade",
+      createdAt: new Date(),
+    };
+
+    commit((draft) => {
+      draft.users.push(user);
+      draft.units.push(unit);
+      draft.unitMembers.push({
+        userId,
+        unitId,
+        role: "admin",
+        fullName: user.name,
+        email: user.email,
+        phone: user.phone ?? undefined,
+        unitName: unit.name,
+        createdAt: new Date(),
+      });
+      draft.session = {
+        userId,
+        token: createId("token"),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+      };
+    });
+
+    return this.getSession();
   },
 
   getSnapshot() {
     return deepClone(state);
   },
 
-  getSession(): MockSession | null {
+  getSession(): LocalSession | null {
     return state.session ? { ...state.session } : null;
   },
 
@@ -663,7 +537,7 @@ export const mockDb = {
     const user = state.users.find((item) => item.email.toLowerCase() === normalizedEmail);
 
     if (!user || user.password !== password) {
-      throw new Error("E-mail ou senha invalidos. Use uma das contas demo e a senha 123456.");
+      throw new Error("E-mail ou senha invalidos.");
     }
 
     commit((draft) => {
@@ -687,10 +561,10 @@ export const mockDb = {
     const normalizedEmail = email.trim().toLowerCase();
     const user = state.users.find((item) => item.email.toLowerCase() === normalizedEmail);
     if (!user) {
-      throw new Error("Nenhum usuario mock encontrado com esse e-mail.");
+      throw new Error("Nenhum usuario encontrado com esse e-mail.");
     }
 
-    return { message: `Modo mock ativo: a senha atual de ${user.email} e 123456.` };
+    return { message: `Conta localizada para ${user.email}. Entre na sessao e defina uma nova senha abaixo.` };
   },
 
   async updatePassword(newPassword: string) {
@@ -793,12 +667,11 @@ export const mockDb = {
 
   async getOccupancyData(): Promise<OccupancyData[]> {
     const occupied = state.parkingSpots.filter((spot) => spot.status === "occupied").length;
-    const totalUsable = Math.max(1, state.parkingSpots.filter((spot) => spot.status !== "maintenance" && spot.status !== "blocked").length);
+    const totalUsable = state.parkingSpots.filter((spot) => spot.status !== "maintenance" && spot.status !== "blocked").length;
+    const occupancy = totalUsable === 0 ? 0 : Math.round((occupied / totalUsable) * 100);
+    const currentHour = `${String(new Date().getHours()).padStart(2, "0")}:00`;
 
-    return Array.from({ length: 8 }, (_, index) => ({
-      hour: `${String(9 + index).padStart(2, "0")}:00`,
-      occupancy: Math.min(100, Math.round(((occupied + (index % 3)) / totalUsable) * 100)),
-    }));
+    return [{ hour: currentHour, occupancy }];
   },
 
   async getDashboardStats(): Promise<DashboardStats> {
@@ -825,7 +698,14 @@ export const mockDb = {
       avgStayDuration,
       activeAttendants,
       vehiclesWaiting,
-      avgWaitTime: vehiclesWaiting === 0 ? 0 : 7,
+      avgWaitTime:
+        vehiclesWaiting === 0
+          ? 0
+          : Math.round(
+              state.vehicles
+                .filter((vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit")
+                .reduce((sum, vehicle) => sum + Math.max(1, Math.round((Date.now() - (vehicle.requestedAt ?? vehicle.entryTime).getTime()) / 60_000)), 0) / vehiclesWaiting,
+            ),
     };
   },
 
@@ -840,6 +720,8 @@ export const mockDb = {
 
     const openCash = currentOpenCashSession();
     const currentUser = requireCurrentUser();
+    const linkedClient = findClientByPlate(input.plate);
+    const isRecurringClient = Boolean(linkedClient);
     const newVehicle: Vehicle = {
       id: createId("stay"),
       plate: input.plate.trim().toUpperCase(),
@@ -860,6 +742,10 @@ export const mockDb = {
       inspection: input.createInspection ? input.inspection : undefined,
       pricing: { tableName: "Tabela local", dailyRate: 70 },
       prepaidPaid: Boolean(input.prepaidAmount),
+      linkedClientId: linkedClient?.id,
+      recurringClientCategory: linkedClient?.category,
+      billingStatusAtEntry: isRecurringClient ? "current" : undefined,
+      exemptFromCharge: isRecurringClient || Boolean(input.prepaidAmount),
       entryCashSessionId: openCash?.id,
       spotHistory: [{ spotId: input.spotId, changedAt: new Date(), changedBy: currentUser.name }],
     };
@@ -895,29 +781,36 @@ export const mockDb = {
 
     const now = new Date();
     const openCash = currentOpenCashSession();
+    const shouldCharge = !vehicle.exemptFromCharge && input.amount > 0;
     const transaction: Transaction = {
       id: createId("txn"),
       vehicleId: vehicle.id,
-      amount: input.amount,
-      paymentMethod: input.paymentMethod,
+      amount: shouldCharge ? input.amount : 0,
+      paymentMethod: shouldCharge ? input.paymentMethod : "monthly",
       status: "completed",
       createdAt: now,
       completedAt: now,
       receiptNumber: `REC-${Math.floor(Math.random() * 9000 + 1000)}`,
       duration: Math.max(1, Math.round((now.getTime() - vehicle.entryTime.getTime()) / 60_000)),
       cashSessionId: openCash?.id,
+      clientName: vehicle.clientName,
+      clientCategory: vehicle.recurringClientCategory ?? "avulso",
     };
 
     const updatedVehicle: Vehicle = { ...vehicle, status: "delivered", exitTime: now, exitCashSessionId: openCash?.id };
 
     commit((draft) => {
-      draft.transactions.unshift(transaction);
+      if (shouldCharge) {
+        draft.transactions.unshift(transaction);
+      }
       draft.vehicles = draft.vehicles.map((item) => (item.id === vehicle.id ? updatedVehicle : item));
       draft.parkingSpots = draft.parkingSpots.map((spot) =>
         spot.id === vehicle.spotId ? { ...spot, status: "available", vehicleId: undefined } : spot,
       );
       addActivity(draft, createActivity("exit", "Saida registrada", `${vehicle.plate} deixou o patio.`, vehicle.plate));
-      addActivity(draft, createActivity("payment", "Pagamento concluido", `Recebimento registrado para ${vehicle.plate}.`, vehicle.plate));
+      if (shouldCharge) {
+        addActivity(draft, createActivity("payment", "Pagamento concluido", `Recebimento registrado para ${vehicle.plate}.`, vehicle.plate));
+      }
       updateCashSessionStats(draft);
     });
 
@@ -979,6 +872,8 @@ export const mockDb = {
     const existing = state.clients.find((client) => client.id === input.clientId);
     if (!existing) throw new Error("Cliente nao encontrado.");
 
+    const nextVehicles = input.vehicles?.length ? input.vehicles : existing.vehicles;
+
     const updatedClient: Client = {
       ...existing,
       name: input.name.trim(),
@@ -991,6 +886,7 @@ export const mockDb = {
       includedSpots: input.includedSpots ?? existing.includedSpots,
       vipSpots: input.vipSpots ?? existing.vipSpots,
       monthlyFee: input.monthlyFee,
+      vehicles: nextVehicles,
       vehicleDrivers: input.vehicleDrivers,
       vehicleModels: input.vehicleModels,
       billingDueDate: new Date(new Date().getFullYear(), new Date().getMonth(), input.dueDay),
@@ -1028,6 +924,7 @@ export const mockDb = {
 
     const openCash = currentOpenCashSession();
     const amount = input.amount ?? client.monthlyFee;
+    const receiptPrefix = client.category === "agreement" ? "AGR" : "CLI";
     const transaction: Transaction = {
       id: createId("txn"),
       vehicleId: client.id,
@@ -1036,14 +933,26 @@ export const mockDb = {
       status: "completed",
       createdAt: new Date(),
       completedAt: new Date(),
-      receiptNumber: `REC-${Math.floor(Math.random() * 9000 + 1000)}`,
+      receiptNumber: `${receiptPrefix}-${Math.floor(Math.random() * 9000 + 1000)}`,
       duration: 0,
       cashSessionId: openCash?.id,
+      clientName: client.name,
+      clientCategory: client.category,
     };
 
     commit((draft) => {
       draft.transactions.unshift(transaction);
-      draft.clients = draft.clients.map((item) => (item.id === client.id ? { ...item, totalSpent: item.totalSpent + amount } : item));
+      draft.clients = draft.clients.map((item) =>
+        item.id === client.id
+          ? {
+              ...item,
+              totalSpent: item.totalSpent + amount,
+              totalVisits: item.totalVisits + 1,
+              billingDueDate: new Date(item.billingDueDate.getFullYear(), item.billingDueDate.getMonth() + 1, item.billingDueDay),
+            }
+          : item,
+      );
+      addActivity(draft, createActivity("payment", "Cobranca registrada", `${client.name} teve um pagamento confirmado.`, undefined));
       updateCashSessionStats(draft);
     });
 
@@ -1245,7 +1154,7 @@ export const mockDb = {
     const unit = state.units.find((item) => item.id === unitId);
     const userId = createId("user");
     const invitationId = createId("invite");
-    const user: MockUserRecord = {
+    const user: LocalUserRecord = {
       id: userId,
       email: input.email.trim().toLowerCase(),
       name: input.name.trim(),
@@ -1253,7 +1162,7 @@ export const mockDb = {
       unitId,
       phone: input.phone?.trim() || null,
       avatarUrl: null,
-      password: "123456",
+      password: createId("pwd"),
       status: input.sendInviteEmail === false ? "active" : "invited",
       workPeriodStart: input.workPeriodStart,
       workPeriodEnd: input.workPeriodEnd,

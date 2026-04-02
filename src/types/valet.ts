@@ -132,6 +132,8 @@ export interface Transaction {
   receiptNumber: string;
   duration: number; // in minutes
   cashSessionId?: string;
+  clientName?: string;
+  clientCategory?: ClientCategory | "avulso";
 }
 
 export interface CashSessionReportEntry {

@@ -53,6 +53,7 @@ export default function ClientsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [vehicleOpen, setVehicleOpen] = useState(false);
   const [chargeOpen, setChargeOpen] = useState(false);
+  const [visibleClientIds, setVisibleClientIds] = useState<string[]>([]);
 
   const filteredClients = useMemo(() => {
     const normalized = searchQuery.trim().toLowerCase();
@@ -137,6 +138,12 @@ export default function ClientsPage() {
             description="Empresas com quantidade de vagas e possibilidade de reservar vagas VIP."
             clients={filteredClients.filter((client) => client.category === "agreement")}
             emptyMessage="Nenhum credenciado encontrado com o filtro atual."
+            visibleClientIds={visibleClientIds}
+            onToggleVisibility={(clientId) =>
+              setVisibleClientIds((current) =>
+                current.includes(clientId) ? current.filter((id) => id !== clientId) : [...current, clientId],
+              )
+            }
             onEdit={(client) => {
               setSelectedClient(client);
               setEditOpen(true);
@@ -155,6 +162,12 @@ export default function ClientsPage() {
             description="Clientes pessoa fisica com ate 3 placas vinculadas e 1 vaga recorrente."
             clients={filteredClients.filter((client) => client.category === "monthly")}
             emptyMessage="Nenhum mensalista encontrado com o filtro atual."
+            visibleClientIds={visibleClientIds}
+            onToggleVisibility={(clientId) =>
+              setVisibleClientIds((current) =>
+                current.includes(clientId) ? current.filter((id) => id !== clientId) : [...current, clientId],
+              )
+            }
             onEdit={(client) => {
               setSelectedClient(client);
               setEditOpen(true);
@@ -184,6 +197,8 @@ function CategoryPanel({
   description,
   clients,
   emptyMessage,
+  visibleClientIds,
+  onToggleVisibility,
   onEdit,
   onAddVehicle,
   onCharge,
@@ -192,6 +207,8 @@ function CategoryPanel({
   description: string;
   clients: Client[];
   emptyMessage: string;
+  visibleClientIds: string[];
+  onToggleVisibility: (clientId: string) => void;
   onEdit: (client: Client) => void;
   onAddVehicle: (client: Client) => void;
   onCharge: (client: Client) => void;
@@ -207,6 +224,7 @@ function CategoryPanel({
         <div className="space-y-3">
           {clients.map((client) => {
             const overdue = isOverdue(client);
+            const detailsVisible = visibleClientIds.includes(client.id);
 
             return (
               <article key={client.id} className="rounded-2xl border border-border/60 bg-background/40 p-4">
@@ -227,24 +245,39 @@ function CategoryPanel({
                     </div>
 
                     <div className="space-y-1 text-sm text-muted-foreground">
-                      <p className="flex items-center gap-2">
-                        <Phone className="h-4 w-4" />
-                        {client.phone}
-                      </p>
-                      <p className="flex items-center gap-2">
-                        <Mail className="h-4 w-4" />
-                        {client.email}
-                      </p>
-                      {client.cnpj ? (
-                        <p className="flex items-center gap-2">
-                          <ShieldCheck className="h-4 w-4" />
-                          CNPJ {client.cnpj}
-                        </p>
-                      ) : null}
+                      {detailsVisible ? (
+                        <>
+                          <p className="flex items-center gap-2">
+                            <Phone className="h-4 w-4" />
+                            {client.phone}
+                          </p>
+                          <p className="flex items-center gap-2">
+                            <Mail className="h-4 w-4" />
+                            {client.email}
+                          </p>
+                          {client.cnpj ? (
+                            <p className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4" />
+                              CNPJ {client.cnpj}
+                            </p>
+                          ) : null}
+                          {client.cpf ? (
+                            <p className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4" />
+                              CPF {client.cpf}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Informacoes ocultas</p>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-3">
+                    <Button variant="outline" size="sm" onClick={() => onToggleVisibility(client.id)}>
+                      {detailsVisible ? "Ocultar infos" : "Mostrar infos"}
+                    </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="self-end">

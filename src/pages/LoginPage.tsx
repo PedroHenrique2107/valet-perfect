@@ -9,11 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { getRememberedEmail, getRememberMePreference, setRememberedEmail, setRememberMePreference } from "@/lib/auth-storage";
+import { formatPhoneBR } from "@/lib/masks";
 
 export default function LoginPage() {
-  const { session, user, loading, signIn, resetMockDb, requestPasswordReset, updatePassword } = useAuth();
+  const { session, user, loading, signIn, hasUsers, registerFirstUser, requestPasswordReset, updatePassword } = useAuth();
   const [email, setEmail] = useState(() => getRememberedEmail());
   const [password, setPassword] = useState("");
+  const [setupName, setSetupName] = useState("");
+  const [setupPhone, setSetupPhone] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(() => getRememberMePreference());
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +25,7 @@ export default function LoginPage() {
   const [resetOpen, setResetOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState(() => getRememberedEmail());
   const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [resetError, setResetError] = useState<string | null>(null);
   const [sendingReset, setSendingReset] = useState(false);
@@ -41,6 +45,36 @@ export default function LoginPage() {
       await signIn(email.trim(), password);
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Nao foi possivel entrar.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFirstAccess = async () => {
+    if (password.length < 6) {
+      setError("A senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("As senhas nao conferem.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    setRememberMePreference(true);
+    setRememberedEmail(email.trim());
+
+    try {
+      await registerFirstUser({
+        name: setupName.trim(),
+        email: email.trim(),
+        password,
+        phone: setupPhone.trim() || undefined,
+      });
+    } catch (registerError) {
+      setError(registerError instanceof Error ? registerError.message : "Nao foi possivel criar o primeiro acesso.");
     } finally {
       setSubmitting(false);
     }
@@ -67,7 +101,7 @@ export default function LoginPage() {
       return;
     }
 
-    if (newPassword !== confirmPassword) {
+    if (newPassword !== passwordConfirmation) {
       setResetError("As senhas nao conferem.");
       return;
     }
@@ -96,25 +130,17 @@ export default function LoginPage() {
       <div className="relative grid w-full max-w-5xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="hidden rounded-[32px] border border-white/10 bg-white/5 p-10 text-white shadow-2xl shadow-sky-950/40 lg:block">
           <p className="text-sm uppercase tracking-[0.35em] text-sky-200/70">Valet Tracker</p>
-          <h1 className="mt-6 max-w-md font-serif text-5xl leading-tight">Operacao de valet em modo local, sem banco conectado.</h1>
+          <h1 className="mt-6 max-w-md font-serif text-5xl leading-tight">Operacao de valet em ambiente local, sem dados ficticios pre-carregados.</h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-slate-300">
-            Entre com uma conta demo e continue o projeto usando o `mockDB`, deixando a conexao com banco para a etapa final.
+            Os dados operacionais agora comecam vazios. No primeiro acesso, crie o administrador local e siga preenchendo a base com dados reais.
           </p>
           <div className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-slate-200">
-            <p className="font-semibold">Contas demo</p>
-            <p className="mt-2">admin@valettracker.com</p>
-            <p>lider@valettracker.com</p>
-            <p>manobrista@valettracker.com</p>
-            <p>caixa@valettracker.com</p>
-            <p className="mt-3 text-sky-200">Senha padrao: 123456</p>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-4 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-              onClick={() => void resetMockDb()}
-            >
-              Resetar mockDB
-            </Button>
+            <p className="font-semibold">{hasUsers ? "Acesso local" : "Primeiro acesso"}</p>
+            <p className="mt-2">
+              {hasUsers
+                ? "Use as credenciais ja cadastradas localmente para entrar."
+                : "Crie o primeiro usuario administrador para liberar o restante da plataforma."}
+            </p>
           </div>
         </section>
 
@@ -125,10 +151,25 @@ export default function LoginPage() {
             </div>
             <CardTitle className="text-3xl font-semibold text-slate-950">Entrar</CardTitle>
             <CardDescription className="text-sm leading-6 text-slate-700">
-              O projeto esta rodando totalmente em modo local com autenticacao mockada.
+              {hasUsers ? "Use sua conta local para acessar a plataforma." : "Crie o primeiro acesso local para iniciar a operacao."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            {!hasUsers ? (
+              <div className="space-y-2">
+                <Label htmlFor="setup-name" className="text-sm font-semibold text-slate-800">
+                  Nome completo
+                </Label>
+                <Input
+                  id="setup-name"
+                  value={setupName}
+                  onChange={(event) => setSetupName(event.target.value)}
+                  className="h-12 rounded-xl border-slate-300 bg-slate-50 text-slate-950 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white"
+                  placeholder="Seu nome"
+                />
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-semibold text-slate-800">
                 Email
@@ -149,7 +190,7 @@ export default function LoginPage() {
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-sm font-semibold text-slate-800">
-                Senha
+                {hasUsers ? "Senha" : "Crie uma senha"}
               </Label>
               <div className="relative">
                 <Input
@@ -173,34 +214,66 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
-              <label className="flex items-center gap-3 text-sm text-slate-700">
-                <Checkbox checked={rememberMe} onCheckedChange={(checked) => setRememberMe(Boolean(checked))} />
-                <span>Lembrar de mim</span>
-              </label>
+            {!hasUsers ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="setup-phone" className="text-sm font-semibold text-slate-800">
+                    Telefone
+                  </Label>
+                  <Input
+                    id="setup-phone"
+                    value={setupPhone}
+                    onChange={(event) => setSetupPhone(formatPhoneBR(event.target.value))}
+                    className="h-12 rounded-xl border-slate-300 bg-slate-50 text-slate-950 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white"
+                    placeholder="(00) 00000-0000"
+                    inputMode="numeric"
+                  />
+                </div>
 
-              <button
-                type="button"
-                className="text-sm font-medium text-sky-700 transition hover:text-sky-900"
-                onClick={() => {
-                  setResetEmail(email || getRememberedEmail());
-                  setResetOpen(true);
-                }}
-              >
-                Ajuda com a senha
-              </button>
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password" className="text-sm font-semibold text-slate-800">
+                    Confirmar senha
+                  </Label>
+                  <Input
+                    id="confirm-password"
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    className="h-12 rounded-xl border-slate-300 bg-slate-50 text-slate-950 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white"
+                    placeholder="Repita a senha"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between gap-4">
+                <label className="flex items-center gap-3 text-sm text-slate-700">
+                  <Checkbox checked={rememberMe} onCheckedChange={(checked) => setRememberMe(Boolean(checked))} />
+                  <span>Lembrar de mim</span>
+                </label>
+
+                <button
+                  type="button"
+                  className="text-sm font-medium text-sky-700 transition hover:text-sky-900"
+                  onClick={() => {
+                    setResetEmail(email || getRememberedEmail());
+                    setResetOpen(true);
+                  }}
+                >
+                  Ajuda com a senha
+                </button>
+              </div>
+            )}
 
             {error ? <div className="rounded-2xl border border-rose-300/80 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">{error}</div> : null}
 
             <Button
               type="button"
               className="h-12 w-full rounded-xl bg-slate-950 text-white hover:bg-slate-800"
-              disabled={submitting || !email || !password}
-              onClick={() => void handleLogin()}
+              disabled={submitting || !email || !password || (!hasUsers && (!setupName || !confirmPassword))}
+              onClick={() => void (hasUsers ? handleLogin() : handleFirstAccess())}
             >
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {submitting ? "Entrando..." : "Acessar plataforma"}
+              {submitting ? (hasUsers ? "Entrando..." : "Criando acesso...") : hasUsers ? "Acessar plataforma" : "Criar primeiro acesso"}
             </Button>
           </CardContent>
         </Card>
@@ -216,7 +289,7 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <DialogTitle className="text-2xl font-semibold text-slate-950">Senha em modo local</DialogTitle>
                 <DialogDescription className="max-w-md text-sm leading-6 text-slate-600">
-                  Como o projeto esta sem banco conectado, a recuperacao acontece localmente so para fins de desenvolvimento.
+                  Como o projeto esta sem servico de identidade externo, a redefinicao de senha acontece localmente.
                 </DialogDescription>
               </div>
             </DialogHeader>
@@ -269,8 +342,8 @@ export default function LoginPage() {
                 <Input
                   id="confirm-password"
                   type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  value={passwordConfirmation}
+                  onChange={(event) => setPasswordConfirmation(event.target.value)}
                   placeholder="Repita a nova senha"
                   className="h-12 rounded-xl border-slate-300 bg-slate-50 text-slate-950 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white"
                 />
@@ -283,7 +356,7 @@ export default function LoginPage() {
             <Button
               type="button"
               className="h-12 w-full rounded-xl bg-sky-500 text-white shadow-lg shadow-sky-200 transition hover:bg-sky-600"
-              disabled={savingPassword || !newPassword || !confirmPassword}
+              disabled={savingPassword || !newPassword || !passwordConfirmation}
               onClick={() => void handleUpdatePassword()}
             >
               {savingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

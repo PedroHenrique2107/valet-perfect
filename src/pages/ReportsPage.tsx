@@ -44,6 +44,7 @@ import {
   useVehiclesQuery,
 } from "@/hooks/useValetData";
 import { formatCurrencyBRL, formatDateTimeBR, formatDurationMinutes } from "@/lib/format";
+import { getRevenueCategory, getTransactionSourceLabel, resolveTransactionClientName } from "@/lib/transactions";
 import type { Client, RevenueData, Transaction, Vehicle } from "@/types/valet";
 
 type PeriodPreset = "today" | "7d" | "1m" | "6m" | "1y" | "custom";
@@ -184,61 +185,27 @@ function downloadCsv(filename: string, headers: string[], rows: Array<Array<stri
   window.URL.revokeObjectURL(url);
 }
 
-function getRevenueCategory(transaction: Transaction, vehicle?: Vehicle) {
-  if (transaction.receiptNumber.startsWith("AGR-")) {
-    return "agreement" as const;
-  }
-
-  if (transaction.receiptNumber.startsWith("CLI-")) {
-    return "monthly" as const;
-  }
-
-  if (vehicle?.recurringClientCategory === "agreement") {
-    return "agreement" as const;
-  }
-
-  return "avulso" as const;
-}
-
 function getClientLabel(clientName: string) {
   const trimmed = clientName.trim();
   return trimmed.length > 0 ? trimmed : "Sem identificacao";
 }
 
 function buildTopClients(clients: Client[], vehicles: Vehicle[], transactions: Transaction[]) {
-  const vehicleById = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
-  const rows = new Map<string, { name: string; vehicles: number; visits: number; revenue: number }>();
+  return clients
+    .map((client) => {
+      const clientVehicles = vehicles.filter((vehicle) => vehicle.linkedClientId === client.id);
+      const clientTransactions = transactions.filter((transaction) => {
+        const relatedVehicle = vehicles.find((vehicle) => vehicle.id === transaction.vehicleId);
+        return relatedVehicle?.linkedClientId === client.id || transaction.clientName === client.name;
+      });
 
-  clients.forEach((client) => {
-    rows.set(client.name.toLowerCase(), {
-      name: client.name,
-      vehicles: client.vehicles.length,
-      visits: client.totalVisits,
-      revenue: client.totalSpent,
-    });
-  });
-
-  vehicles.forEach((vehicle) => {
-    const key = getClientLabel(vehicle.clientName).toLowerCase();
-    const current = rows.get(key) ?? { name: getClientLabel(vehicle.clientName), vehicles: 0, visits: 0, revenue: 0 };
-    current.vehicles += 1;
-    current.visits += 1;
-    rows.set(key, current);
-  });
-
-  transactions.forEach((transaction) => {
-    const vehicle = vehicleById.get(transaction.vehicleId);
-    if (!vehicle) {
-      return;
-    }
-
-    const key = getClientLabel(vehicle.clientName).toLowerCase();
-    const current = rows.get(key) ?? { name: getClientLabel(vehicle.clientName), vehicles: 0, visits: 0, revenue: 0 };
-    current.revenue += transaction.amount;
-    rows.set(key, current);
-  });
-
-  return Array.from(rows.values())
+      return {
+        name: client.name,
+        vehicles: client.vehicles.length,
+        visits: Math.max(client.totalVisits, clientVehicles.length),
+        revenue: clientTransactions.reduce((acc, transaction) => acc + transaction.amount, 0),
+      };
+    })
     .sort((left, right) => right.revenue - left.revenue || right.visits - left.visits)
     .slice(0, 5);
 }
@@ -373,10 +340,12 @@ export default function ReportsPage() {
     .slice(0, 20)
     .map((transaction) => {
       const vehicle = vehicles.find((item) => item.id === transaction.vehicleId);
+      const clientName = resolveTransactionClientName(transaction, vehicle, clients);
       return [
         formatDateTimeBR(transaction.createdAt),
         vehicle?.plate ?? "-",
-        getClientLabel(vehicle?.clientName ?? ""),
+        getClientLabel(clientName),
+        getTransactionSourceLabel(transaction, vehicle, clients),
         transaction.receiptNumber,
         transaction.paymentMethod,
         transaction.status,
@@ -387,7 +356,7 @@ export default function ReportsPage() {
   const handleExport = () => {
     downloadCsv(
       `relatorios-${format(new Date(), "yyyy-MM-dd")}.csv`,
-      ["data_hora", "placa", "cliente", "recibo", "pagamento", "status", "valor"],
+      ["data_hora", "placa", "cliente", "origem", "recibo", "pagamento", "status", "valor"],
       summaryRows,
     );
   };
@@ -701,6 +670,7 @@ export default function ReportsPage() {
                     <th>Data/Hora</th>
                     <th>Placa</th>
                     <th>Cliente</th>
+                    <th>Origem</th>
                     <th>Recibo</th>
                     <th>Pagamento</th>
                     <th>Valor</th>
@@ -708,13 +678,14 @@ export default function ReportsPage() {
                 </thead>
                 <tbody>
                   {summaryRows.map((row) => (
-                    <tr key={`${row[0]}-${row[3]}`}>
+                    <tr key={`${row[0]}-${row[4]}`}>
                       <td>{row[0]}</td>
                       <td className="font-mono">{row[1]}</td>
                       <td>{row[2]}</td>
-                      <td className="font-mono">{row[3]}</td>
-                      <td>{row[4]}</td>
-                      <td className="font-semibold text-foreground">{formatCurrencyBRL(Number(row[6]))}</td>
+                      <td>{row[3]}</td>
+                      <td className="font-mono">{row[4]}</td>
+                      <td>{row[5]}</td>
+                      <td className="font-semibold text-foreground">{formatCurrencyBRL(Number(row[7]))}</td>
                     </tr>
                   ))}
                 </tbody>

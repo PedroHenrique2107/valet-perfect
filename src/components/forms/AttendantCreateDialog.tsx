@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCreateAttendantMutation } from "@/hooks/useValetData";
 import { useAppSettings } from "@/lib/app-settings";
+import { formatPhoneBR } from "@/lib/masks";
 import { useToast } from "@/hooks/use-toast";
 
 const PHONE_REGEX = /^\(\d{2}\) \d{5}-\d{4}$/;
@@ -56,13 +57,6 @@ function formatWorkHours(hours: number): string {
   const fullHours = Math.floor(hours);
   const minutes = Math.round((hours - fullHours) * 60);
   return `${fullHours}h ${minutes.toString().padStart(2, "0")}m`;
-}
-
-function formatPhoneInput(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  if (digits.length <= 2) return `(${digits}`;
-  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
 export function AttendantCreateDialog({ open, onOpenChange }: AttendantCreateDialogProps) {
@@ -129,7 +123,7 @@ export function AttendantCreateDialog({ open, onOpenChange }: AttendantCreateDia
             placeholder="(99) 99999-9999"
             value={form.watch("phone")}
             onChange={(event) =>
-              form.setValue("phone", formatPhoneInput(event.target.value), { shouldValidate: true })
+              form.setValue("phone", formatPhoneBR(event.target.value), { shouldValidate: true })
             }
             inputMode="numeric"
           />

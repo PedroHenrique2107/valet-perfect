@@ -111,6 +111,7 @@ export interface UpdateClientInput {
   includedSpots?: number;
   vipSpots?: number;
   monthlyFee: number;
+  vehicles?: string[];
   vehicleDrivers?: Record<string, string>;
   vehicleModels?: Record<string, string>;
 }

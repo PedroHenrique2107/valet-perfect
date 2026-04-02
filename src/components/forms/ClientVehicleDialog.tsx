@@ -13,21 +13,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAddClientVehicleMutation } from "@/hooks/useValetData";
+import { isValidPlate, normalizePlate } from "@/lib/masks";
 import type { Client } from "@/types/valet";
 
 const schema = z.object({
-  plate: z.string().min(7, "Informe uma placa valida"),
+  plate: z.string().refine((value) => isValidPlate(value), "Informe uma placa valida"),
   driverName: z.string().optional(),
   model: z.string().min(2, "Informe o modelo do veiculo"),
 });
 
 type FormValues = z.infer<typeof schema>;
-
-function normalizePlate(value: string) {
-  const raw = value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-  const standard = `${raw.slice(0, 3)}-${raw.slice(3, 7)}`.replace(/-$/, "");
-  return raw.length >= 7 && /\d/.test(raw.slice(3, 4)) && /[A-Z]/.test(raw.slice(4, 5)) ? raw.slice(0, 7) : standard;
-}
 
 interface ClientVehicleDialogProps {
   open: boolean;
