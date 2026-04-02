@@ -17,6 +17,8 @@ const FinancialPage = lazy(() => import("./pages/FinancialPage"));
 const CashPage = lazy(() => import("./pages/CashPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const ClientsPage = lazy(() => import("./pages/ClientsPage"));
+const EventsPage = lazy(() => import("./pages/EventsPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 const queryClient = new QueryClient({
@@ -100,6 +102,22 @@ const App = () => (
                 element={
                   <ProtectedRoute allowedRoles={["admin", "leader", "cashier"]}>
                     <ReportsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/events"
+                element={
+                  <ProtectedRoute allowedRoles={["admin", "leader", "attendant", "cashier"]}>
+                    <EventsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/notifications"
+                element={
+                  <ProtectedRoute allowedRoles={["admin", "leader", "attendant", "cashier"]}>
+                    <NotificationsPage />
                   </ProtectedRoute>
                 }
               />

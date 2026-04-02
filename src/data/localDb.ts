@@ -1,12 +1,15 @@
 import type { SessionUser, UserRole } from "@/types/auth";
 import type { ManagedUserCreationResult, PurgeResult, Unit, UnitInvitation, UnitMember } from "@/types/management";
+import { getAppSettings } from "@/lib/app-settings";
 import type {
   Activity,
+  AppNotification,
   Attendant,
   CashSession,
   Client,
   DashboardStats,
   OccupancyData,
+  OperationEvent,
   ParkingSpot,
   RevenueData,
   Transaction,
@@ -452,6 +455,309 @@ function summarizeCashReport(sessionId: string) {
   };
 }
 
+function parseTimeToMinutes(value: string) {
+  const [hours, minutes] = value.split(":").map((item) => Number(item));
+  return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0);
+}
+
+function isNowWithinShift(startTime: string, endTime: string, now = new Date()) {
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const startMinutes = parseTimeToMinutes(startTime);
+  const endMinutes = parseTimeToMinutes(endTime);
+
+  if (startMinutes === endMinutes) return true;
+  if (startMinutes < endMinutes) {
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  }
+
+  return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+}
+
+function getCurrentShiftRule() {
+  const settings = getAppSettings();
+  return settings.shiftRules.find((shift) => isNowWithinShift(shift.startTime, shift.endTime)) ?? settings.shiftRules[0];
+}
+
+function buildEventsSnapshot(): OperationEvent[] {
+  const now = new Date();
+  const openCash = currentOpenCashSession();
+  const events: OperationEvent[] = [];
+  const monthlyClients = state.clients.filter((client) => client.category === "monthly");
+
+  monthlyClients.forEach((client) => {
+    const dueTime = client.billingDueDate.getTime();
+    const daysDiff = Math.ceil((dueTime - now.getTime()) / (24 * 60 * 60_000));
+
+    if (daysDiff <= 0) {
+      events.push({
+        id: `event-billing-overdue-${client.id}`,
+        title: `Cobranca em atraso: ${client.name}`,
+        description: "Mensalidade vencida. Revisar regularizacao do cliente e alinhar proximo contato.",
+        category: "billing",
+        status: "attention",
+        scheduledFor: client.billingDueDate,
+        badge: "Mensalista",
+        ownerName: client.name,
+        relatedEntityId: client.id,
+        relatedEntityType: "client",
+      });
+      return;
+    }
+
+    if (daysDiff <= 7) {
+      events.push({
+        id: `event-billing-upcoming-${client.id}`,
+        title: `Vencimento proximo: ${client.name}`,
+        description: `Mensalidade vence em ${daysDiff} dia(s). Vale preparar lembrete e cobranca preventiva.`,
+        category: "billing",
+        status: "scheduled",
+        scheduledFor: client.billingDueDate,
+        badge: "Financeiro",
+        ownerName: client.name,
+        relatedEntityId: client.id,
+        relatedEntityType: "client",
+      });
+    }
+  });
+
+  state.vehicles
+    .filter((vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit")
+    .forEach((vehicle) => {
+      const requestBase = vehicle.requestedAt ?? vehicle.entryTime;
+      const waitMinutes = Math.max(1, Math.round((now.getTime() - requestBase.getTime()) / 60_000));
+      const assignedAttendant = state.attendants.find((attendant) => attendant.id === vehicle.attendantId);
+      events.push({
+        id: `event-vehicle-${vehicle.id}`,
+        title: vehicle.status === "in_transit" ? `Entrega em andamento: ${vehicle.plate}` : `Retirada pendente: ${vehicle.plate}`,
+        description:
+          vehicle.status === "in_transit"
+            ? `${vehicle.plate} esta em deslocamento para entrega ha ${waitMinutes} minuto(s).`
+            : `${vehicle.plate} aguarda retirada ha ${waitMinutes} minuto(s).`,
+        category: "operation",
+        status: "in_progress",
+        scheduledFor: requestBase,
+        badge: vehicle.spotId,
+        ownerName: assignedAttendant?.name,
+        relatedEntityId: vehicle.id,
+        relatedEntityType: "vehicle",
+      });
+    });
+
+  state.vehicles
+    .filter((vehicle) => {
+      const linkedClient = vehicle.linkedClientId
+        ? state.clients.find((client) => client.id === vehicle.linkedClientId)
+        : findClientByPlate(vehicle.plate);
+      return Boolean(vehicle.vipRequired || linkedClient?.isVip);
+    })
+    .slice(0, 4)
+    .forEach((vehicle) => {
+      events.push({
+        id: `event-vip-${vehicle.id}`,
+        title: `Acompanhamento VIP: ${vehicle.plate}`,
+        description: "Cliente prioritario presente na operacao. Acompanhar spot, tempo e retirada com atencao.",
+        category: "vip",
+        status: vehicle.status === "requested" || vehicle.status === "in_transit" ? "in_progress" : "scheduled",
+        scheduledFor: vehicle.requestedAt ?? vehicle.entryTime,
+        badge: "VIP",
+        ownerName: vehicle.clientName,
+        relatedEntityId: vehicle.id,
+        relatedEntityType: "vehicle",
+      });
+    });
+
+  state.parkingSpots
+    .filter((spot) => spot.status === "maintenance" || spot.status === "blocked")
+    .forEach((spot) => {
+      events.push({
+        id: `event-maintenance-${spot.id}`,
+        title: `Vaga indisponivel: ${spot.code}`,
+        description: `A vaga ${spot.code} esta marcada como ${spot.status === "maintenance" ? "manutencao" : "bloqueada"}.`,
+        category: "maintenance",
+        status: spot.status === "maintenance" ? "attention" : "scheduled",
+        scheduledFor: now,
+        badge: `Piso ${spot.floor}`,
+        relatedEntityId: spot.id,
+        relatedEntityType: "parking-spot",
+      });
+    });
+
+  const activeShift = getCurrentShiftRule();
+  const onlineAttendants = state.attendants.filter((attendant) => attendant.isOnline);
+  events.push({
+    id: `event-shift-${activeShift.id}`,
+    title: `Turno ativo: ${activeShift.name}`,
+    description: `${onlineAttendants.length} colaborador(es) online para meta de ${activeShift.targetHeadcount} no turno atual.`,
+    category: "team",
+    status: onlineAttendants.length >= activeShift.targetHeadcount ? "in_progress" : "attention",
+    scheduledFor: now,
+    badge: `${activeShift.startTime} - ${activeShift.endTime}`,
+    relatedEntityType: "attendant",
+  });
+
+  if (openCash) {
+    events.push({
+      id: `event-cash-${openCash.id}`,
+      title: `Caixa em operacao: ${openCash.attendantName}`,
+      description: `${openCash.totalTransactions} pagamento(s) e ${openCash.totalEntries} entrada(s) vinculadas a sessao atual.`,
+      category: "cash",
+      status: "in_progress",
+      scheduledFor: openCash.openedAt,
+      badge: "Caixa aberto",
+      ownerName: openCash.attendantName,
+      relatedEntityId: openCash.id,
+      relatedEntityType: "cash-session",
+    });
+  }
+
+  return events.sort((left, right) => right.scheduledFor.getTime() - left.scheduledFor.getTime()).slice(0, 20);
+}
+
+function buildNotificationsSnapshot(): AppNotification[] {
+  const settings = getAppSettings();
+  const now = new Date();
+  const items: AppNotification[] = [];
+  const usableSpots = state.parkingSpots.filter((spot) => spot.status !== "maintenance" && spot.status !== "blocked");
+  const occupiedSpots = usableSpots.filter((spot) => spot.status === "occupied");
+  const occupancyRate = usableSpots.length > 0 ? Math.round((occupiedSpots.length / usableSpots.length) * 100) : 0;
+
+  if (occupancyRate >= settings.alerts.occupancyThreshold) {
+    items.push({
+      id: "notification-occupancy-threshold",
+      title: "Patio acima do limite de ocupacao",
+      message: `${occupancyRate}% de ocupacao frente ao alerta configurado de ${settings.alerts.occupancyThreshold}%.`,
+      kind: "occupancy",
+      severity: occupancyRate >= 95 ? "critical" : "warning",
+      createdAt: now,
+      read: false,
+      actionLabel: "Reorganizar vagas",
+    });
+  }
+
+  state.vehicles
+    .filter((vehicle) => vehicle.status === "requested" || vehicle.status === "in_transit")
+    .forEach((vehicle) => {
+      const baseTime = vehicle.requestedAt ?? vehicle.entryTime;
+      const waitMinutes = Math.max(1, Math.round((now.getTime() - baseTime.getTime()) / 60_000));
+      if (waitMinutes < 5) return;
+
+      items.push({
+        id: `notification-vehicle-${vehicle.id}`,
+        title: `${vehicle.plate} com espera elevada`,
+        message: `Fila de retirada em ${waitMinutes} minuto(s) para ${vehicle.clientName || "cliente nao identificado"}.`,
+        kind: "vehicle",
+        severity: waitMinutes >= 10 ? "critical" : "warning",
+        createdAt: baseTime,
+        read: false,
+        actionLabel: "Priorizar entrega",
+        relatedEntityId: vehicle.id,
+        relatedEntityType: "vehicle",
+      });
+    });
+
+  const overdueClients = state.clients.filter((client) => client.category === "monthly" && client.billingDueDate.getTime() < now.getTime());
+  if (overdueClients.length > 0) {
+    items.push({
+      id: "notification-overdue-clients",
+      title: "Mensalistas com cobranca vencida",
+      message: `${overdueClients.length} cliente(s) mensalista(s) com vencimento passado na base local.`,
+      kind: "client",
+      severity: overdueClients.length >= 3 ? "critical" : "warning",
+      createdAt: overdueClients[0]?.billingDueDate ?? now,
+      read: false,
+      actionLabel: "Cobrar clientes",
+      relatedEntityId: overdueClients[0]?.id,
+      relatedEntityType: overdueClients[0] ? "client" : undefined,
+    });
+  }
+
+  const maintenanceRate =
+    state.parkingSpots.length > 0
+      ? Math.round((state.parkingSpots.filter((spot) => spot.status === "maintenance").length / state.parkingSpots.length) * 100)
+      : 0;
+  if (maintenanceRate >= settings.alerts.maintenanceThreshold) {
+    items.push({
+      id: "notification-maintenance-threshold",
+      title: "Vagas em manutencao acima do esperado",
+      message: `${maintenanceRate}% das vagas estao em manutencao, acima do limite de ${settings.alerts.maintenanceThreshold}%.`,
+      kind: "maintenance",
+      severity: "warning",
+      createdAt: now,
+      read: false,
+      actionLabel: "Revisar patio",
+    });
+  }
+
+  const currentShift = getCurrentShiftRule();
+  const onlineAttendants = state.attendants.filter((attendant) => attendant.isOnline);
+  if (onlineAttendants.length < currentShift.targetHeadcount) {
+    items.push({
+      id: `notification-team-gap-${currentShift.id}`,
+      title: "Equipe abaixo da meta do turno",
+      message: `${onlineAttendants.length} online para meta de ${currentShift.targetHeadcount} no turno ${currentShift.name}.`,
+      kind: "team",
+      severity: "warning",
+      createdAt: now,
+      read: false,
+      actionLabel: "Redistribuir equipe",
+    });
+  }
+
+  if (settings.alerts.overtimeEnabled) {
+    state.attendants
+      .filter((attendant) => attendant.isOnline && attendant.startedAt)
+      .forEach((attendant) => {
+        const workedMinutes = Math.max(
+          attendant.accumulatedWorkMinutes,
+          Math.round((now.getTime() - (attendant.startedAt?.getTime() ?? now.getTime())) / 60_000),
+        );
+        if (workedMinutes <= attendant.maxWorkHours * 60) return;
+
+        items.push({
+          id: `notification-overtime-${attendant.id}`,
+          title: `${attendant.name} excedeu a jornada`,
+          message: `${attendant.name} acumula ${workedMinutes} minuto(s), acima do limite de ${attendant.maxWorkHours}h.`,
+          kind: "team",
+          severity: "critical",
+          createdAt: attendant.startedAt ?? now,
+          read: false,
+          actionLabel: "Trocar operador",
+          relatedEntityId: attendant.id,
+          relatedEntityType: "attendant",
+        });
+      });
+  }
+
+  const openCash = currentOpenCashSession();
+  if (!openCash) {
+    items.push({
+      id: "notification-cash-closed",
+      title: "Caixa fechado",
+      message: "Sem caixa aberto, as telas operacionais ficam bloqueadas ate nova abertura.",
+      kind: "cash",
+      severity: "critical",
+      createdAt: now,
+      read: false,
+      actionLabel: "Abrir caixa",
+    });
+  } else {
+    items.push({
+      id: "notification-cash-open",
+      title: "Caixa liberado para operacao",
+      message: "A sessao atual do caixa esta aberta e pronta para registrar entradas, saidas e pagamentos.",
+      kind: "cash",
+      severity: "success",
+      createdAt: openCash.openedAt,
+      read: true,
+      actionLabel: "Ver caixa",
+      relatedEntityId: openCash.id,
+      relatedEntityType: "cash-session",
+    });
+  }
+
+  return items.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()).slice(0, 25);
+}
+
 export const localDb = {
   subscribe(listener: () => void) {
     listeners.add(listener);
@@ -711,6 +1017,14 @@ export const localDb = {
 
   async getActivities() {
     return state.activities;
+  },
+
+  async getEvents() {
+    return buildEventsSnapshot();
+  },
+
+  async getNotifications() {
+    return buildNotificationsSnapshot();
   },
 
   async createVehicle(input: CreateVehicleInput) {

@@ -221,6 +221,38 @@ export interface Activity {
   plate?: string;
 }
 
+export type EventCategory = "billing" | "operation" | "team" | "vip" | "maintenance" | "cash";
+export type EventStatus = "scheduled" | "in_progress" | "attention" | "completed";
+
+export interface OperationEvent {
+  id: string;
+  title: string;
+  description: string;
+  category: EventCategory;
+  status: EventStatus;
+  scheduledFor: Date;
+  badge?: string;
+  ownerName?: string;
+  relatedEntityId?: string;
+  relatedEntityType?: "vehicle" | "client" | "cash-session" | "attendant" | "parking-spot";
+}
+
+export type NotificationKind = "occupancy" | "vehicle" | "client" | "cash" | "team" | "maintenance";
+export type NotificationSeverity = "info" | "warning" | "critical" | "success";
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  kind: NotificationKind;
+  severity: NotificationSeverity;
+  createdAt: Date;
+  read: boolean;
+  actionLabel?: string;
+  relatedEntityId?: string;
+  relatedEntityType?: "vehicle" | "client" | "cash-session" | "attendant" | "parking-spot";
+}
+
 export interface Client {
   id: string;
   name: string;

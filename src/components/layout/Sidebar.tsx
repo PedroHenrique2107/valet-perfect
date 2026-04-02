@@ -21,7 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getRoleDisplayName, useAuth } from "@/contexts/AuthContext";
-import { useVehiclesQuery } from "@/hooks/useValetData";
+import { useNotificationsQuery, useVehiclesQuery } from "@/hooks/useValetData";
 import { useAppSettings } from "@/lib/app-settings";
 import { cn } from "@/lib/utils";
 
@@ -42,11 +42,11 @@ const mainNavItems: NavItem[] = [
   { icon: Wallet, label: "Caixa", href: "/cash" },
   { icon: UserCircle, label: "Clientes", href: "/clients" },
   { icon: BarChart3, label: "Relatorios", href: "/reports" },
-  { icon: Calendar, label: "Eventos", href: "/events", comingSoon: true },
+  { icon: Calendar, label: "Eventos", href: "/events" },
 ];
 
 const bottomNavItems: NavItem[] = [
-  { icon: Bell, label: "Notificacoes", href: "/notifications", badge: 5, comingSoon: true },
+  { icon: Bell, label: "Notificacoes", href: "/notifications" },
   { icon: Settings, label: "Configuracoes", href: "/settings" },
 ];
 
@@ -55,11 +55,16 @@ export function Sidebar() {
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { data: vehicles = [] } = useVehiclesQuery();
+  const { data: notifications = [] } = useNotificationsQuery();
   const settings = useAppSettings();
   const parkedVehiclesCount = vehicles.filter((vehicle) => vehicle.status === "parked").length;
+  const unreadNotificationsCount = notifications.filter((notification) => !notification.read).length;
 
   const resolvedMainNavItems = mainNavItems.map((item) =>
     item.href === "/vehicles" ? { ...item, badge: parkedVehiclesCount } : item,
+  );
+  const resolvedBottomNavItems = bottomNavItems.map((item) =>
+    item.href === "/notifications" ? { ...item, badge: unreadNotificationsCount } : item,
   );
 
   const NavItemLink = ({ item }: { item: NavItem }) => {
@@ -152,7 +157,7 @@ export function Sidebar() {
       </nav>
 
       <div className="space-y-1 border-t border-sidebar-border px-3 py-4">
-        {bottomNavItems.map((item) => (
+        {resolvedBottomNavItems.map((item) => (
           <NavItemLink key={item.href} item={item} />
         ))}
       </div>

@@ -36,6 +36,8 @@ const ALL_KEYS = [
   "occupancy",
   "dashboard-stats",
   "activities",
+  "events",
+  "notifications",
   "clients",
   "units",
   "unit-members",
@@ -118,6 +120,22 @@ export function useActivitiesQuery() {
   return useQuery({
     queryKey: ["activities"],
     queryFn: valetApi.getActivities,
+    staleTime: STALE_TIME,
+  });
+}
+
+export function useEventsQuery() {
+  return useQuery({
+    queryKey: ["events"],
+    queryFn: valetApi.getEvents,
+    staleTime: STALE_TIME,
+  });
+}
+
+export function useNotificationsQuery() {
+  return useQuery({
+    queryKey: ["notifications"],
+    queryFn: valetApi.getNotifications,
     staleTime: STALE_TIME,
   });
 }
